@@ -1,3 +1,14 @@
+//! An experimental middleware for jwt-based login for nickel.
+//!
+//! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
+//! cookie and if that contains a valid jwt token, signed with the
+//! secret key.  If there is a properly signed token,
+//! `SessionRequestExtensions` is added to the request, so furhter
+//! middlewares and views can get the authorized user.
+//!
+//! Also, the response is extended with `SessionResponseExtensions`,
+//! which can be used to set the user (login) or clear the user
+//! (logout).
 extern crate nickel;
 extern crate plugin;
 extern crate typemap;
@@ -17,6 +28,7 @@ use plugin::Extensible;
 use std::default::Default;
 use typemap::Key;
 
+/// The middleware itself.
 #[derive(Clone)]
 pub struct SessionMiddleware {
     /// The key for signing jwts.  Should be kept private, but needs
@@ -25,13 +37,16 @@ pub struct SessionMiddleware {
 }
 
 impl SessionMiddleware {
+    /// Create a new instance.
+    ///
+    /// The `server_key` is used for signing and validating the jwt token.
     pub fn new(server_key: &str) -> SessionMiddleware {
         SessionMiddleware { server_key: server_key.to_owned() }
     }
 }
 
 #[derive(Debug)]
-pub struct Session {
+struct Session {
     authorized_user: Option<String>,
 }
 
@@ -79,12 +94,34 @@ impl<D> Middleware<D> for SessionMiddleware {
     }
 }
 
+/// Extension trait for the request.
+///
+/// Import this trait and a nickel request will implement it.
 pub trait SessionRequestExtensions {
+    /// Check if there is an authorized user.
+    ///
+    /// If there is an authorized user, Some(username) is returned,
+    /// otherwise, None is returned.
     fn authorized_user(&self) -> Option<String>;
 }
+
+/// Extension trait for the response.
+///
+/// Import this trait and a nickel response will implement it.
 pub trait SessionResponseExtensions {
+    /// Set the user.
+    ///
+    /// A jwt cookie signed with the secret key will be added to the
+    /// response.
+    /// It is the responsibility of the caller to actually validate
+    /// the user (e.g. by password, or by CAS or some other mechanism)
     fn set_jwt_user(&mut self, user: &str);
+    /// Clear the user.
+    ///
+    /// The jwt cookie will be cleared (set to empty with zero max_age).
+    fn clear_jwt_user(&mut self);
 }
+
 impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
     fn authorized_user(&self) -> Option<String> {
         if let Some(session) = self.extensions().get::<Session>() {
@@ -106,7 +143,7 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
                 let header: Header = Default::default();
                 let claims = Registered {
                     sub: Some(user.into()),
-                    ..Default::default(),
+                    ..Default::default()
                 };
                 let token = Token::new(header, claims);
                 token.signed(sm.server_key.as_ref(), Sha256::new()).ok()
@@ -117,8 +154,15 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         };
         if let Some(data) = signed_token {
             println!("Setting new token {}", data);
+            // Note: We should set secure to true on the cookie
+            // but the example server is only http.
             self.set(SetCookie(vec![CookiePair::new("jwt".to_owned(), data)]));
         }
+    }
+    fn clear_jwt_user(&mut self) {
+        let mut gone = CookiePair::new("jwt".to_owned(), "".to_owned());
+        gone.max_age = Some(0);
+        self.set(SetCookie(vec![gone]));
     }
 }
 
