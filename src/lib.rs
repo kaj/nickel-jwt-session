@@ -12,7 +12,6 @@
 extern crate nickel;
 extern crate plugin;
 extern crate typemap;
-extern crate rustc_serialize;
 extern crate jwt;
 extern crate crypto;
 extern crate cookie;

@@ -4,11 +4,10 @@ version = "0.1.0"
 authors = ["Rasmus Kaj <kaj@kth.se>"]
 
 [dependencies]
-nickel = "*"
-plugin = "*"
-typemap = "*"
-rustc-serialize = "*"
-jwt = "*"
-cookie = "*"
-rust-crypto = "*"
-hyper = "0.8.1"
+nickel = "0.8"
+hyper = "0.8"
+plugin = "0.2"
+typemap = "0.3"
+jwt = "0.4"
+cookie = "0.2"
+rust-crypto = "0.2"
