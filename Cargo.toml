@@ -2,6 +2,9 @@
 name = "nickel-jwt-session"
 version = "0.1.0"
 authors = ["Rasmus Kaj <kaj@kth.se>"]
+description = "A nickel middleware for jwt-based user sessions."
+repository = "https://github.com/kaj/nickel-jwt-session"
+readme = "README.md"
 
 [dependencies]
 nickel = "0.8"
