@@ -16,6 +16,7 @@ extern crate jwt;
 extern crate crypto;
 extern crate cookie;
 extern crate hyper;
+#[macro_use] extern crate log;
 
 use cookie::Cookie as CookiePair;
 use crypto::sha2::Sha256;
@@ -78,14 +79,17 @@ impl<D> Middleware<D> for SessionMiddleware {
             match Token::<Header, Registered>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
+                        let user = token.claims.sub;
+                        info!("User {:?} is authorized for {} on {}",
+                              user, req.origin.remote_addr, req.origin.uri);
                         req.extensions_mut()
-                           .insert::<Session>(Session { authorized_user: token.claims.sub });
+                           .insert::<Session>(Session { authorized_user: user });
                     } else {
-                        println!("Invalid token {:?}", token);
+                        info!("Invalid token {:?}", token);
                     }
                 }
                 Err(err) => {
-                    println!("Bad jwt token: {:?}", err);
+                    info!("Bad jwt token: {:?}", err);
                 }
             }
         }
@@ -124,19 +128,19 @@ pub trait SessionResponseExtensions {
 impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
     fn authorized_user(&self) -> Option<String> {
         if let Some(session) = self.extensions().get::<Session>() {
-            println!("Got a session: {:?}", session);
+            debug!("Got a session: {:?}", session);
             if let Some(ref user) = session.authorized_user {
                 return Some(user.clone());
             }
         }
-        println!("authorized_user returning None");
+        debug!("authorized_user returning None");
         None
     }
 }
 
 impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
     fn set_jwt_user(&mut self, user: &str) {
-        println!("Should set a user jwt for {}", user);
+        debug!("Should set a user jwt for {}", user);
         let signed_token = {
             if let Some(sm) = self.extensions().get::<SessionMiddleware>() {
                 let header: Header = Default::default();
@@ -147,12 +151,12 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
                 let token = Token::new(header, claims);
                 token.signed(sm.server_key.as_ref(), Sha256::new()).ok()
             } else {
-                println!("No SessionMiddleware on response.  :-(");
+                warn!("No SessionMiddleware on response.  :-(");
                 None
             }
         };
         if let Some(data) = signed_token {
-            println!("Setting new token {}", data);
+            debug!("Setting new token {}", data);
             // Note: We should set secure to true on the cookie
             // but the example server is only http.
             self.set(SetCookie(vec![CookiePair::new("jwt".to_owned(), data)]));

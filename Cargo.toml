@@ -5,6 +5,7 @@ authors = ["Rasmus Kaj <kaj@kth.se>"]
 description = "A nickel middleware for jwt-based user sessions."
 repository = "https://github.com/kaj/nickel-jwt-session"
 readme = "README.md"
+license = "MIT/Apache-2.0"
 
 [dependencies]
 nickel = "0.8"
@@ -14,3 +15,5 @@ typemap = "0.3"
 jwt = "0.4"
 cookie = "0.2"
 rust-crypto = "0.2"
+env_logger = "0.3"
+log = "0.3"

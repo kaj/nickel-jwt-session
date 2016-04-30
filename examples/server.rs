@@ -3,6 +3,7 @@
 extern crate nickel_jwt_session;
 extern crate cookie;
 extern crate hyper;
+extern crate env_logger;
 
 use nickel::{HttpRouter, Nickel, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 use nickel::extensions::Redirect;
 
 fn main() {
+    env_logger::init().unwrap();
     let mut server = Nickel::new();
     server.utilize(SessionMiddleware::new("My very secret key"));
 
