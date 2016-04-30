@@ -34,6 +34,10 @@ pub struct SessionMiddleware {
     /// The key for signing jwts.  Should be kept private, but needs
     /// to be the same on multiple servers sharing a jwt domain.
     server_key: String,
+    /// Value for the iss (issuer) jwt claim.
+    issuer: Option<String>,
+    /// How long should a token be valid after creation?
+    expiration_time: u64,
 }
 
 impl SessionMiddleware {
@@ -41,7 +45,38 @@ impl SessionMiddleware {
     ///
     /// The `server_key` is used for signing and validating the jwt token.
     pub fn new(server_key: &str) -> SessionMiddleware {
-        SessionMiddleware { server_key: server_key.to_owned() }
+        SessionMiddleware {
+            server_key: server_key.to_owned(),
+            issuer: None,
+            expiration_time: 24 * 60 * 60,
+        }
+    }
+
+    /// Set a value for the iss (issuer) jwt claim.
+    pub fn issuer(mut self, issuer: &str) -> Self {
+        self.issuer = Some(issuer.to_owned());
+        self
+    }
+
+    /// Set how long a token should be valid after creation (in seconds).
+    pub fn expiration_time(mut self, expiration_time: u64) -> Self {
+        self.expiration_time = expiration_time;
+        self
+    }
+
+    fn make_token(&self, user: &str) -> Option<String> {
+        let header: Header = Default::default();
+        let now = current_numeric_date();
+        let claims = Registered {
+            iss: self.issuer.clone(),
+            sub: Some(user.into()),
+            exp: Some(now + self.expiration_time),
+            nbf: Some(now),
+            ..Default::default()
+        };
+        let token = Token::new(header, claims);
+        token.signed(self.server_key.as_ref(),
+                     Sha256::new()).ok()
     }
 }
 
@@ -79,6 +114,22 @@ impl<D> Middleware<D> for SessionMiddleware {
             match Token::<Header, Registered>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
+                        debug!("Verified token for: {:?}", token.claims);
+                        let now = current_numeric_date();
+                        if let Some(nbf) = token.claims.nbf {
+                            if now < nbf {
+                                warn!("Got a not-yet valid token: {:?}",
+                                      token.claims);
+                                return Ok(Continue(res));
+                            }
+                        }
+                        if let Some(exp) = token.claims.exp {
+                            if now > exp {
+                                warn!("Got an expired token: {:?}",
+                                      token.claims);
+                                return Ok(Continue(res));
+                            }
+                        }
                         if let Some(user) = token.claims.sub {
                             info!("User {:?} is authorized for {} on {}",
                                   user, req.origin.remote_addr, req.origin.uri);
@@ -140,25 +191,23 @@ impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
 impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
     fn set_jwt_user(&mut self, user: &str) {
         debug!("Should set a user jwt for {}", user);
-        let signed_token = {
+        let cookie = {
             if let Some(sm) = self.extensions().get::<SessionMiddleware>() {
-                let header: Header = Default::default();
-                let claims = Registered {
-                    sub: Some(user.into()),
-                    ..Default::default()
-                };
-                let token = Token::new(header, claims);
-                token.signed(sm.server_key.as_ref(), Sha256::new()).ok()
+                sm.make_token(user).map(|data| {
+                    // Note: We should set secure to true on the cookie
+                    // but the example server is only http.
+                    let mut cookie = CookiePair::new("jwt".to_owned(), data);
+                    cookie.max_age = Some(sm.expiration_time);
+                    cookie
+                })
             } else {
                 warn!("No SessionMiddleware on response.  :-(");
                 None
             }
         };
-        if let Some(data) = signed_token {
-            debug!("Setting new token {}", data);
-            // Note: We should set secure to true on the cookie
-            // but the example server is only http.
-            self.set(SetCookie(vec![CookiePair::new("jwt".to_owned(), data)]));
+        if let Some(cookie) = cookie {
+            debug!("Setting new token {}", cookie);
+            self.set(SetCookie(vec![cookie]));
         }
     }
     fn clear_jwt_user(&mut self) {
@@ -168,6 +217,15 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
     }
 }
 
+/// Get the current value for jwt NumericDate.
+///
+/// Defined in RFC 7519 section 2 to be equivalent to POSIX.1 "Seconds
+/// Since the Epoch".  The RFC allows a NumericDate to be non-integer
+/// (for sub-second resolution), but the jwt crate uses u64.
+fn current_numeric_date() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap().as_secs()
+}
 
 #[cfg(test)]
 mod tests {
