@@ -47,7 +47,7 @@ impl SessionMiddleware {
 
 #[derive(Debug)]
 struct Session {
-    authorized_user: Option<String>,
+    authorized_user: String,
 }
 
 impl Key for SessionMiddleware {
@@ -79,11 +79,12 @@ impl<D> Middleware<D> for SessionMiddleware {
             match Token::<Header, Registered>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
-                        let user = token.claims.sub;
-                        info!("User {:?} is authorized for {} on {}",
-                              user, req.origin.remote_addr, req.origin.uri);
-                        req.extensions_mut()
-                           .insert::<Session>(Session { authorized_user: user });
+                        if let Some(user) = token.claims.sub {
+                            info!("User {:?} is authorized for {} on {}",
+                                  user, req.origin.remote_addr, req.origin.uri);
+                            req.extensions_mut()
+                                .insert::<Session>(Session { authorized_user: user });
+                        }
                     } else {
                         info!("Invalid token {:?}", token);
                     }
@@ -129,9 +130,7 @@ impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
     fn authorized_user(&self) -> Option<String> {
         if let Some(session) = self.extensions().get::<Session>() {
             debug!("Got a session: {:?}", session);
-            if let Some(ref user) = session.authorized_user {
-                return Some(user.clone());
-            }
+            return Some(session.authorized_user.clone());
         }
         debug!("authorized_user returning None");
         None
