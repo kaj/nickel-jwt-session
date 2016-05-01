@@ -8,7 +8,7 @@ Suggestions for improvements are welcome.
 
 A working example can be found in the [examples](examples) directory.
 Read the [API documentation]
-(https://rasmus.krats.se/doc/nickel-jwt-session/0.2.0/nickel-jwt-session/)
+(https://rasmus.krats.se/doc/nickel-jwt-session/0.2.0/nickel_jwt_session/).
 
 ## License
 

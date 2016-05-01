@@ -9,7 +9,7 @@ if [ "$VERSION" == "" ]; then
 fi
 
 DOCSUBDIR=$PROJECT/$VERSION
-DOCURL=https://rasmus.krats.se/doc/$DOCSUBDIR/$PROJECT/
+DOCURL=https://rasmus.krats.se/doc/$DOCSUBDIR/nickel_jwt_session/
 
 cat Cargo.toml \
     | sed -e "s#^version.*#version = \"$VERSION\"#" \
@@ -17,7 +17,7 @@ cat Cargo.toml \
     > Cargo.toml.new
 mv Cargo.toml.new Cargo.toml
 cat README.md \
-    | sed -Ee "s#https://rasmus.krats.se/doc/$PROJECT/[0-9.]+/$PROJECT/#$DOCURL#" \
+    | sed -Ee "s#https://rasmus.krats.se/doc/$PROJECT/[0-9.]+/nickel_jwt_session/#$DOCURL#" \
     > README.md.new
 mv README.md.new README.md
 
