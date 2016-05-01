@@ -1,0 +1,49 @@
+#! /bin/sh
+set -e
+VERSION=$1
+PROJECT="nickel-jwt-session"
+
+if [ "$VERSION" == "" ]; then
+   echo "A release needs a version number!"
+   exit 1
+fi
+
+DOCSUBDIR=$PROJECT/$VERSION
+DOCURL=https://rasmus.krats.se/doc/$DOCSUBDIR/$PROJECT/
+
+cat Cargo.toml \
+    | sed -e "s#^version.*#version = \"$VERSION\"#" \
+    | sed -e "s#^documentation.*#documentation = \"$DOCURL\"#" \
+    > Cargo.toml.new
+mv Cargo.toml.new Cargo.toml
+cat README.md \
+    | sed -Ee "s#https://rasmus.krats.se/doc/$PROJECT/[0-9.]+/$PROJECT/#$DOCURL#" \
+    > README.md.new
+mv README.md.new README.md
+
+LOG=`mktemp --suffix=.buildlog`
+
+function error {
+  cat $LOG
+  exit 1
+}
+
+echo Testing ...
+cargo test > $LOG 2>&1 || error
+
+echo Making docs ...
+cargo doc --no-deps > $LOG 2>&1 || error
+
+echo Publishing docs ...
+ssh guran mkdir -p pubdoc/$PROJECT
+scp -qr target/doc guran:pubdoc/$DOCSUBDIR
+
+echo Comitting the relase ...
+git add Cargo.toml README.md
+git commit -m "Release $VERSION"
+git tag -a v$VERSION
+git push --all
+git push --tags
+
+echo "Publishing the release to crates.io ..."
+cargo publish

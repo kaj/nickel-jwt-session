@@ -6,6 +6,10 @@ Suggestions for improvements are welcome.
 [![Build Status](https://travis-ci.org/kaj/nickel-jwt-session.svg?branch=master)]
 (https://travis-ci.org/kaj/nickel-jwt-session)
 
+A working example can be found in the [examples](examples) directory.
+Read the [API documentation]
+(https://rasmus.krats.se/doc/nickel-jwt-session/0.2.0/nickel-jwt-session/)
+
 ## License
 
 Licensed under either of
