@@ -2,13 +2,19 @@
 //!
 //! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
 //! cookie and if that contains a valid jwt token, signed with the
-//! secret key.  If there is a properly signed token,
-//! `SessionRequestExtensions` is added to the request, so furhter
-//! middlewares and views can get the authorized user.
+//! secret key.
+//! If there is a properly signed token, a session is added to the
+//! request.
+//! Further middlewares and views can get the authorized user through
+//! the `SessionRequestExtensions` method `authorized_user`.
 //!
 //! Also, the response is extended with `SessionResponseExtensions`,
 //! which can be used to set the user (login) or clear the user
 //! (logout).
+//!
+//! A working usage example exists in [the examples directory]
+//! (https://github.com/kaj/nickel-jwt-session/tree/master/examples).
+
 extern crate nickel;
 extern crate plugin;
 extern crate typemap;
@@ -151,7 +157,9 @@ impl<D> Middleware<D> for SessionMiddleware {
 
 /// Extension trait for the request.
 ///
-/// Import this trait and a nickel request will implement it.
+/// This trait is implemented for `nickel::Request`.
+/// Use this trait to be able to get the authorized user for a nickel
+/// request.
 pub trait SessionRequestExtensions {
     /// Check if there is an authorized user.
     ///
@@ -162,7 +170,9 @@ pub trait SessionRequestExtensions {
 
 /// Extension trait for the response.
 ///
-/// Import this trait and a nickel response will implement it.
+/// This trait is implemented for `nickel::Response`.
+/// Use this trait to be able to set and clear a jwt token on a nickel
+/// response.
 pub trait SessionResponseExtensions {
     /// Set the user.
     ///
@@ -170,10 +180,14 @@ pub trait SessionResponseExtensions {
     /// response.
     /// It is the responsibility of the caller to actually validate
     /// the user (e.g. by password, or by CAS or some other mechanism)
+    /// before calling this method.
+    /// The token will be valid for the expiration_time specified on
+    /// the `SessionMiddleware` from the current time.
     fn set_jwt_user(&mut self, user: &str);
     /// Clear the user.
     ///
-    /// The jwt cookie will be cleared (set to empty with zero max_age).
+    /// The response will clear the jwt cookie (set it to empty with
+    /// zero max_age).
     fn clear_jwt_user(&mut self);
 }
 
