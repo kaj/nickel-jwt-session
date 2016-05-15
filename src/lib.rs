@@ -22,7 +22,8 @@ extern crate jwt;
 extern crate crypto;
 extern crate cookie;
 extern crate hyper;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 use cookie::Cookie as CookiePair;
 use crypto::sha2::Sha256;
@@ -81,8 +82,7 @@ impl SessionMiddleware {
             ..Default::default()
         };
         let token = Token::new(header, claims);
-        token.signed(self.server_key.as_ref(),
-                     Sha256::new()).ok()
+        token.signed(self.server_key.as_ref(), Sha256::new()).ok()
     }
 }
 
@@ -98,7 +98,8 @@ impl Key for Session {
     type Value = Session;
 }
 
-fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>, name: &str)
+fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
+                             name: &str)
                              -> Option<String> {
     if let Some(cookies) = req.origin.headers.get::<header::Cookie>() {
         for cookie in cookies.iter() {
@@ -140,7 +141,9 @@ impl<D> Middleware<D> for SessionMiddleware {
                             info!("User {:?} is authorized for {} on {}",
                                   user, req.origin.remote_addr, req.origin.uri);
                             req.extensions_mut()
-                                .insert::<Session>(Session { authorized_user: user });
+                               .insert::<Session>(Session {
+                                   authorized_user: user,
+                               });
                         }
                     } else {
                         info!("Invalid token {:?}", token);
