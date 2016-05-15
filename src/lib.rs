@@ -104,7 +104,7 @@ fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
     if let Some(cookies) = req.origin.headers.get::<header::Cookie>() {
         for cookie in cookies.iter() {
             if cookie.name == name {
-                return Some(cookie.value.to_string());
+                return Some(cookie.value.clone());
             }
         }
     }
