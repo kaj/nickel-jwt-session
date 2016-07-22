@@ -1,10 +1,10 @@
 //! An experimental middleware for jwt-based login for nickel.
 //!
 //! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
-//! cookie and if that contains a valid jwt token, signed with the
-//! secret key.
-//! If there is a properly signed token, a session is added to the
-//! request.
+//! cookie or Authorization: Bearer header, depending on configuration,
+//! and if it finds contains a valid, properly signed jwt token, an
+//! authorized_user session is added to the request.
+//!
 //! Further middlewares and views can get the authorized user through
 //! the `SessionRequestExtensions` method `authorized_user`.
 //!
@@ -12,7 +12,7 @@
 //! which can be used to set the user (login) or clear the user
 //! (logout).
 //!
-//! A working usage example exists in [the examples directory]
+//! Working usage examples exist in [the examples directory]
 //! (https://github.com/kaj/nickel-jwt-session/tree/master/examples).
 
 extern crate nickel;
@@ -43,7 +43,7 @@ pub struct SessionMiddleware {
     server_key: String,
     /// Value for the iss (issuer) jwt claim.
     issuer: Option<String>,
-    /// How long should a token be valid after creation?
+    /// How long a token should be valid after creation, in seconds
     expiration_time: u64,
     /// Where to put the token to be returned
     location: TokenLocation,
@@ -210,8 +210,8 @@ pub trait SessionRequestExtensions {
 pub trait SessionResponseExtensions {
     /// Set the user.
     ///
-    /// A jwt cookie signed with the secret key will be added to the
-    /// response.
+    /// A jwt cookie or an Authorization: Bearer header signed with the
+    /// secret key will be added to the response.
     /// It is the responsibility of the caller to actually validate
     /// the user (e.g. by password, or by CAS or some other mechanism)
     /// before calling this method.
@@ -221,7 +221,7 @@ pub trait SessionResponseExtensions {
     /// Clear the user.
     ///
     /// The response will clear the jwt cookie (set it to empty with
-    /// zero max_age).
+    /// zero max_age) or Authorization: Bearer header (set it to empty).
     fn clear_jwt_user(&mut self);
 }
 
