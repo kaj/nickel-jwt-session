@@ -49,10 +49,12 @@ fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
 
 fn private<'mw>(req: &mut Request, res: Response<'mw>)
                 -> MiddlewareResult<'mw>  {
-    if let Some(user) = req.authorized_user() {
-        let mut data = HashMap::new();
-        data.insert("who", user);
-        return res.render("examples/templates/private.tpl", &data);
+    match req.authorized_user() {
+        Some(user) => {
+            let mut data = HashMap::new();
+            data.insert("who", user);
+            res.render("examples/templates/private.tpl", &data)
+        }
+        None => res.error(StatusCode::Forbidden, "Permission denied")
     }
-    res.error(StatusCode::Forbidden, "Permission denied")
 }
