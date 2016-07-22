@@ -29,7 +29,7 @@ fn public<'mw>(req: &mut Request, res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
     let mut data = HashMap::new();
     data.insert("who", req.authorized_user().unwrap_or("world".to_owned()));
-    return res.render("examples/templates/public.tpl", &data);
+    res.render("examples/templates/public.tpl", &data)
 }
 
 fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
