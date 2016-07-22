@@ -15,7 +15,7 @@ fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
     server.utilize(SessionMiddleware::new("My very secret key")
-                   .expiration_time(5)); // Short, to see expierys.
+                   .expiration_time(5)); // Short, to see expiration.
 
     server.get("/",   public);
     server.get("/login", login);
