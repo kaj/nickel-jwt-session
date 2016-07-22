@@ -27,7 +27,7 @@ extern crate log;
 
 use cookie::Cookie as CookiePair;
 use crypto::sha2::Sha256;
-use hyper::header::SetCookie;
+use hyper::header::{Authorization, Bearer, SetCookie};
 use hyper::header;
 use jwt::{Header, Registered, Token};
 use nickel::{Continue, Middleware, MiddlewareResult, Request, Response};
@@ -53,6 +53,7 @@ pub struct SessionMiddleware {
 #[derive(Clone)]
 pub enum TokenLocation {
     Cookie(String),
+    AuthorizationHeader,
 }
 
 impl SessionMiddleware {
@@ -77,6 +78,13 @@ impl SessionMiddleware {
     /// Set how long a token should be valid after creation (in seconds).
     pub fn expiration_time(mut self, expiration_time: u64) -> Self {
         self.expiration_time = expiration_time;
+        self
+    }
+
+    /// Set where the token should be stored, either in a cookie with a
+    /// specified name or in the Authorization: Bearer header.
+    pub fn using(mut self, location: TokenLocation) -> Self {
+        self.location = location;
         self
     }
 
@@ -129,6 +137,12 @@ impl<D> Middleware<D> for SessionMiddleware {
 
         let jwtstr = match self.location {
             TokenLocation::Cookie(ref name) => get_cookie(req, name),
+            TokenLocation::AuthorizationHeader => {
+                req.origin
+                   .headers
+                   .get::<header::Authorization<header::Bearer>>()
+                   .map(|b| b.token.clone())
+            }
         };
 
         if let Some(jwtstr) = jwtstr {
@@ -246,8 +260,12 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
                 // but the example server is only http.
                 let mut cookie = CookiePair::new(name, token);
                 cookie.max_age = Some(expiration);
-                debug!("Setting new token {}", cookie);
+                debug!("Setting new cookie with token {}", cookie);
                 self.set(SetCookie(vec![cookie]));
+            }
+            (Some(TokenLocation::AuthorizationHeader), Some(token), _) => {
+                debug!("Setting new auth header with token {}", token);
+                self.headers_mut().set(Authorization(Bearer { token: token }));
             }
             (_, _, _) => {}
         }
@@ -263,6 +281,10 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
                 let mut gone = CookiePair::new(name, "".to_owned());
                 gone.max_age = Some(0);
                 self.set(SetCookie(vec![gone]));
+            }
+            Some(TokenLocation::AuthorizationHeader) => {
+                self.headers_mut()
+                    .set(Authorization(Bearer { token: "".to_owned() }));
             }
             None => {}
         }
