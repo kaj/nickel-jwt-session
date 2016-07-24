@@ -1,6 +1,6 @@
 [package]
 name = "nickel-jwt-session"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
 	"Rasmus Kaj <kaj@kth.se>",
 	"Carol Nichols <carol.nichols@gmail.com>"
@@ -9,7 +9,7 @@ description = "A nickel middleware for jwt-based user sessions."
 repository = "https://github.com/kaj/nickel-jwt-session"
 readme = "README.md"
 license = "MIT/Apache-2.0"
-documentation = "https://rasmus.krats.se/doc/nickel-jwt-session/0.2.0/nickel-jwt-session/"
+documentation = "https://rasmus.krats.se/doc/nickel-jwt-session/0.3.0/nickel_jwt_session/"
 
 [dependencies]
 nickel = "0.8"
