@@ -1,10 +1,10 @@
 //! An experimental middleware for jwt-based login for nickel.
 //!
 //! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
-//! cookie and if that contains a valid jwt token, signed with the
-//! secret key.
-//! If there is a properly signed token, a session is added to the
-//! request.
+//! cookie or Authorization: Bearer header, depending on configuration,
+//! and if it finds contains a valid, properly signed jwt token, an
+//! authorized_user session is added to the request.
+//!
 //! Further middlewares and views can get the authorized user through
 //! the `SessionRequestExtensions` method `authorized_user`.
 //!
@@ -12,7 +12,7 @@
 //! which can be used to set the user (login) or clear the user
 //! (logout).
 //!
-//! A working usage example exists in [the examples directory]
+//! Working usage examples exist in [the examples directory]
 //! (https://github.com/kaj/nickel-jwt-session/tree/master/examples).
 
 extern crate nickel;
@@ -27,7 +27,7 @@ extern crate log;
 
 use cookie::Cookie as CookiePair;
 use crypto::sha2::Sha256;
-use hyper::header::SetCookie;
+use hyper::header::{Authorization, Bearer, SetCookie};
 use hyper::header;
 use jwt::{Header, Registered, Token};
 use nickel::{Continue, Middleware, MiddlewareResult, Request, Response};
@@ -43,8 +43,17 @@ pub struct SessionMiddleware {
     server_key: String,
     /// Value for the iss (issuer) jwt claim.
     issuer: Option<String>,
-    /// How long should a token be valid after creation?
+    /// How long a token should be valid after creation, in seconds
     expiration_time: u64,
+    /// Where to put the token to be returned
+    location: TokenLocation,
+}
+
+/// Places the token could be located.
+#[derive(Clone)]
+pub enum TokenLocation {
+    Cookie(String),
+    AuthorizationHeader,
 }
 
 impl SessionMiddleware {
@@ -56,6 +65,7 @@ impl SessionMiddleware {
             server_key: server_key.to_owned(),
             issuer: None,
             expiration_time: 24 * 60 * 60,
+            location: TokenLocation::Cookie("jwt".to_owned()),
         }
     }
 
@@ -68,6 +78,13 @@ impl SessionMiddleware {
     /// Set how long a token should be valid after creation (in seconds).
     pub fn expiration_time(mut self, expiration_time: u64) -> Self {
         self.expiration_time = expiration_time;
+        self
+    }
+
+    /// Set where the token should be stored, either in a cookie with a
+    /// specified name or in the Authorization: Bearer header.
+    pub fn using(mut self, location: TokenLocation) -> Self {
+        self.location = location;
         self
     }
 
@@ -117,7 +134,18 @@ impl<D> Middleware<D> for SessionMiddleware {
                           mut res: Response<'mw, D>)
                           -> MiddlewareResult<'mw, D> {
         res.extensions_mut().insert::<SessionMiddleware>((*self).clone());
-        if let Some(jwtstr) = get_cookie(req, "jwt") {
+
+        let jwtstr = match self.location {
+            TokenLocation::Cookie(ref name) => get_cookie(req, name),
+            TokenLocation::AuthorizationHeader => {
+                req.origin
+                   .headers
+                   .get::<header::Authorization<header::Bearer>>()
+                   .map(|b| b.token.clone())
+            }
+        };
+
+        if let Some(jwtstr) = jwtstr {
             match Token::<Header, Registered>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
@@ -139,7 +167,9 @@ impl<D> Middleware<D> for SessionMiddleware {
                         }
                         if let Some(user) = token.claims.sub {
                             info!("User {:?} is authorized for {} on {}",
-                                  user, req.origin.remote_addr, req.origin.uri);
+                                  user,
+                                  req.origin.remote_addr,
+                                  req.origin.uri);
                             req.extensions_mut()
                                .insert::<Session>(Session {
                                    authorized_user: user,
@@ -154,6 +184,7 @@ impl<D> Middleware<D> for SessionMiddleware {
                 }
             }
         }
+
         Ok(Continue(res))
     }
 }
@@ -179,8 +210,8 @@ pub trait SessionRequestExtensions {
 pub trait SessionResponseExtensions {
     /// Set the user.
     ///
-    /// A jwt cookie signed with the secret key will be added to the
-    /// response.
+    /// A jwt cookie or an Authorization: Bearer header signed with the
+    /// secret key will be added to the response.
     /// It is the responsibility of the caller to actually validate
     /// the user (e.g. by password, or by CAS or some other mechanism)
     /// before calling this method.
@@ -190,7 +221,7 @@ pub trait SessionResponseExtensions {
     /// Clear the user.
     ///
     /// The response will clear the jwt cookie (set it to empty with
-    /// zero max_age).
+    /// zero max_age) or Authorization: Bearer header (set it to empty).
     fn clear_jwt_user(&mut self);
 }
 
@@ -208,29 +239,55 @@ impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
 impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
     fn set_jwt_user(&mut self, user: &str) {
         debug!("Should set a user jwt for {}", user);
-        let cookie = {
-            if let Some(sm) = self.extensions().get::<SessionMiddleware>() {
-                sm.make_token(user).map(|data| {
-                    // Note: We should set secure to true on the cookie
-                    // but the example server is only http.
-                    let mut cookie = CookiePair::new("jwt".to_owned(), data);
-                    cookie.max_age = Some(sm.expiration_time);
-                    cookie
-                })
-            } else {
-                warn!("No SessionMiddleware on response.  :-(");
-                None
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token(user),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
+
+        match (location, token, expiration) {
+            (Some(TokenLocation::Cookie(name)),
+             Some(token),
+             Some(expiration)) => {
+                // Note: We should set secure to true on the cookie
+                // but the example server is only http.
+                let mut cookie = CookiePair::new(name, token);
+                cookie.max_age = Some(expiration);
+                debug!("Setting new cookie with token {}", cookie);
+                self.set(SetCookie(vec![cookie]));
             }
-        };
-        if let Some(cookie) = cookie {
-            debug!("Setting new token {}", cookie);
-            self.set(SetCookie(vec![cookie]));
+            (Some(TokenLocation::AuthorizationHeader), Some(token), _) => {
+                debug!("Setting new auth header with token {}", token);
+                self.headers_mut().set(Authorization(Bearer { token: token }));
+            }
+            (_, _, _) => {}
         }
     }
     fn clear_jwt_user(&mut self) {
-        let mut gone = CookiePair::new("jwt".to_owned(), "".to_owned());
-        gone.max_age = Some(0);
-        self.set(SetCookie(vec![gone]));
+        let location = match self.extensions().get::<SessionMiddleware>() {
+            Some(sm) => Some(sm.location.clone()),
+            None => None,
+        };
+
+        match location {
+            Some(TokenLocation::Cookie(name)) => {
+                let mut gone = CookiePair::new(name, "".to_owned());
+                gone.max_age = Some(0);
+                self.set(SetCookie(vec![gone]));
+            }
+            Some(TokenLocation::AuthorizationHeader) => {
+                self.headers_mut()
+                    .set(Authorization(Bearer { token: "".to_owned() }));
+            }
+            None => {}
+        }
     }
 }
 

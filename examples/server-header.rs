@@ -7,7 +7,7 @@ extern crate env_logger;
 
 use nickel::{HttpRouter, Nickel, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
-use nickel_jwt_session::{SessionMiddleware, SessionRequestExtensions, SessionResponseExtensions};
+use nickel_jwt_session::{SessionMiddleware, SessionRequestExtensions, SessionResponseExtensions, TokenLocation};
 use std::collections::HashMap;
 use nickel::extensions::Redirect;
 
@@ -15,7 +15,8 @@ fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
     server.utilize(SessionMiddleware::new("My very secret key")
-                   .expiration_time(5)); // Short, to see expierys.
+                   .expiration_time(10)// Short, to see expiration.
+                   .using(TokenLocation::AuthorizationHeader));
 
     server.get("/",   public);
     server.get("/login", login);
@@ -29,7 +30,7 @@ fn public<'mw>(req: &mut Request, res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
     let mut data = HashMap::new();
     data.insert("who", req.authorized_user().unwrap_or("world".to_owned()));
-    return res.render("examples/templates/public.tpl", &data);
+    res.render("examples/templates/public.tpl", &data)
 }
 
 fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
@@ -49,10 +50,12 @@ fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
 
 fn private<'mw>(req: &mut Request, res: Response<'mw>)
                 -> MiddlewareResult<'mw>  {
-    if let Some(user) = req.authorized_user() {
-        let mut data = HashMap::new();
-        data.insert("who", user);
-        return res.render("examples/templates/private.tpl", &data);
+    match req.authorized_user() {
+        Some(user) => {
+            let mut data = HashMap::new();
+            data.insert("who", user);
+            res.render("examples/templates/private.tpl", &data)
+        }
+        None => res.error(StatusCode::Forbidden, "Permission denied")
     }
-    res.error(StatusCode::Forbidden, "Permission denied")
 }
