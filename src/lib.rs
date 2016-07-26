@@ -2,15 +2,19 @@
 //!
 //! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
 //! cookie or Authorization: Bearer header, depending on configuration,
-//! and if it finds contains a valid, properly signed jwt token, an
-//! authorized_user session is added to the request.
+//! and if it finds contains a valid, properly signed jwt token, data from
+//! the token is added to the request.
 //!
-//! Further middlewares and views can get the authorized user through
-//! the `SessionRequestExtensions` method `authorized_user`.
+//! Basic usage supports setting and clearing a username with the
+//! `set_jwt_user()` and `clear_jwt_user()` methods on
+//! `SessionResponseExtensions`, and accessing an authorized user's username
+//! through the `SessionRequestExtensions` method `authorized_user()`.
 //!
-//! Also, the response is extended with `SessionResponseExtensions`,
-//! which can be used to set the user (login) or clear the user
-//! (logout).
+//! If instead of a username, you would like to store arbitrary data in the
+//! jwt claims payload, use the `set_jwt_custom_claims()` and
+//! `clear_jwt_custom_claims()` methods on `SessionResponseExtensions`, and
+//! access the data on a valid token using the `SessionRequestExtensions` method
+//! `valid_custom_claims()`.
 //!
 //! Working usage examples exist in [the examples directory]
 //! (https://github.com/kaj/nickel-jwt-session/tree/master/examples).
@@ -241,6 +245,10 @@ pub trait SessionRequestExtensions {
     /// otherwise, None is returned.
     fn authorized_user(&self) -> Option<String>;
 
+    /// Check if there is a valid token with custom claims data.
+    ///
+    /// If there is a valid token, Some(&BTreeMap<String, Json>) is returned,
+    /// otherwise, None is returned.
     fn valid_custom_claims(&self) -> Option<&BTreeMap<String, Json>>;
 }
 
@@ -260,14 +268,28 @@ pub trait SessionResponseExtensions {
     /// The token will be valid for the expiration_time specified on
     /// the `SessionMiddleware` from the current time.
     fn set_jwt_user(&mut self, user: &str);
+
     /// Clear the user.
     ///
     /// The response will clear the jwt cookie (set it to empty with
     /// zero max_age) or Authorization: Bearer header (set it to empty).
     fn clear_jwt_user(&mut self);
 
+    /// Set the custom jwt claims data.
+    ///
+    /// A jwt cookie or an Authorization: Bearer header signed with the
+    /// secret key will be added to the response.
+    /// It is the responsibility of the caller to actually authenticate
+    /// (e.g. by password, or by CAS or some other mechanism)
+    /// before calling this method.
+    /// The token will be valid for the expiration_time specified on
+    /// the `SessionMiddleware` from the current time.
     fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>);
 
+    /// Clear the custom jwt claims data.
+    ///
+    /// The response will clear the jwt cookie (set it to empty with
+    /// zero max_age) or Authorization: Bearer header (set it to empty).
     fn clear_jwt_custom_claims(&mut self);
 }
 

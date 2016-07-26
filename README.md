@@ -73,11 +73,15 @@ fn main() {
 
 ## Usage
 
+### Username only
+
+If you only want to store a username, you can use the `set_jwt_user()`, `clear_jwt_user()`, and `authorized_user()` convenience methods.
+
 When you have a user that you have authenticated, use the `set_jwt_user()` method to put a new token for that user into the response:
 
 ```rust
 fn login<'mw>(req: &mut Request, mut res: Response<'mw>)
-              -> MiddlewareResult<'mw>  {
+              -> MiddlewareResult<'mw> {
     let authenticated_user = your_authentication_method(req);
     match authenticated_user {
         Some(username) => {
@@ -109,8 +113,59 @@ And to log a user out, call the `clear_jwt_user()` method:
 
 ```rust
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
-               -> MiddlewareResult<'mw>  {
+               -> MiddlewareResult<'mw> {
     res.clear_jwt_user();
+    res.redirect("/")
+}
+```
+
+### Customized claims payload
+
+If you would like to store arbitrary data in the claims payload instead of a username, use the `set_jwt_custom_claims()`, `clear_jwt_custom_claims()`, and `valid_custom_claims()` methods. The custom claims must be in a `BTreeMap<String, Json>`.
+
+When you have successfully authenticated, use the `set_jwt_custom_claims()` method to put a new token with the data you include into the response:
+
+```rust
+use std::collections::BTreeMap;
+
+fn login<'mw>(req: &mut Request, mut res: Response<'mw>)
+              -> MiddlewareResult<'mw> {
+    let authentication_data = your_authentication_method(req);
+    match authentication_data {
+        Some(data) => {
+            let mut d = BTreeMap::new();
+            d.insert("who".to_owned(), data.who);
+            d.insert("admin".to_owned(), data.admin);
+            res.set_jwt_custom_claims(d);
+            res.redirect("/")
+        }
+        None => {
+            res.redirect("/login")
+        }
+    }
+}
+```
+
+To get the claims out if the token is valid, use the `valid_custom_claims()` method:
+
+```rust
+fn private<'mw>(req: &mut Request, res: Response<'mw>)
+                -> MiddlewareResult<'mw> {
+    match req.valid_custom_claims() {
+        Some(data) => {
+            // Whatever you do with valid data in the claims
+        },
+        None => res.error(StatusCode::Forbidden, "Permission denied"),
+    }
+}
+```
+
+And to end a session, call the `clear_jwt_custom_claims()` method:
+
+```rust
+fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
+               -> MiddlewareResult<'mw> {
+    res.clear_jwt_custom_claims();
     res.redirect("/")
 }
 ```
