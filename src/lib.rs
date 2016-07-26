@@ -24,15 +24,18 @@ extern crate cookie;
 extern crate hyper;
 #[macro_use]
 extern crate log;
+extern crate rustc_serialize;
 
 use cookie::Cookie as CookiePair;
 use crypto::sha2::Sha256;
 use hyper::header::{Authorization, Bearer, SetCookie};
 use hyper::header;
-use jwt::{Header, Registered, Token};
+use jwt::{Claims, Header, Registered, Token};
 use nickel::{Continue, Middleware, MiddlewareResult, Request, Response};
 use plugin::Extensible;
 use std::default::Default;
+use std::collections::BTreeMap;
+use rustc_serialize::json::Json;
 use typemap::Key;
 
 /// The middleware itself.
@@ -101,6 +104,24 @@ impl SessionMiddleware {
         let token = Token::new(header, claims);
         token.signed(self.server_key.as_ref(), Sha256::new()).ok()
     }
+
+    fn make_token_custom_claims(&self,
+                                custom_claims: BTreeMap<String, Json>)
+                                -> Option<String> {
+        let header: Header = Default::default();
+        let now = current_numeric_date();
+        let claims = Claims {
+            reg: Registered {
+                iss: self.issuer.clone(),
+                exp: Some(now + self.expiration_time),
+                nbf: Some(now),
+                ..Default::default()
+            },
+            private: custom_claims,
+        };
+        let token = Token::new(header, claims);
+        token.signed(self.server_key.as_ref(), Sha256::new()).ok()
+    }
 }
 
 #[derive(Debug)]
@@ -108,11 +129,19 @@ struct Session {
     authorized_user: String,
 }
 
+#[derive(Debug)]
+struct CustomSession {
+    claims: BTreeMap<String, Json>,
+}
+
 impl Key for SessionMiddleware {
     type Value = SessionMiddleware;
 }
 impl Key for Session {
     type Value = Session;
+}
+impl Key for CustomSession {
+    type Value = CustomSession;
 }
 
 fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
@@ -146,26 +175,26 @@ impl<D> Middleware<D> for SessionMiddleware {
         };
 
         if let Some(jwtstr) = jwtstr {
-            match Token::<Header, Registered>::parse(&jwtstr) {
+            match Token::<Header, Claims>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
                         debug!("Verified token for: {:?}", token.claims);
                         let now = current_numeric_date();
-                        if let Some(nbf) = token.claims.nbf {
+                        if let Some(nbf) = token.claims.reg.nbf {
                             if now < nbf {
                                 warn!("Got a not-yet valid token: {:?}",
                                       token.claims);
                                 return Ok(Continue(res));
                             }
                         }
-                        if let Some(exp) = token.claims.exp {
+                        if let Some(exp) = token.claims.reg.exp {
                             if now > exp {
                                 warn!("Got an expired token: {:?}",
                                       token.claims);
                                 return Ok(Continue(res));
                             }
                         }
-                        if let Some(user) = token.claims.sub {
+                        if let Some(user) = token.claims.reg.sub {
                             info!("User {:?} is authorized for {} on {}",
                                   user,
                                   req.origin.remote_addr,
@@ -173,6 +202,17 @@ impl<D> Middleware<D> for SessionMiddleware {
                             req.extensions_mut()
                                .insert::<Session>(Session {
                                    authorized_user: user,
+                               });
+                        }
+                        let custom_claims = token.claims.private;
+                        if !custom_claims.is_empty() {
+                            info!("Custom claims {:?} are valid for {} on {}",
+                                  custom_claims,
+                                  req.origin.remote_addr,
+                                  req.origin.uri);
+                            req.extensions_mut()
+                               .insert::<CustomSession>(CustomSession {
+                                   claims: custom_claims,
                                });
                         }
                     } else {
@@ -200,6 +240,8 @@ pub trait SessionRequestExtensions {
     /// If there is an authorized user, Some(username) is returned,
     /// otherwise, None is returned.
     fn authorized_user(&self) -> Option<String>;
+
+    fn valid_custom_claims(&self) -> Option<&BTreeMap<String, Json>>;
 }
 
 /// Extension trait for the response.
@@ -223,6 +265,10 @@ pub trait SessionResponseExtensions {
     /// The response will clear the jwt cookie (set it to empty with
     /// zero max_age) or Authorization: Bearer header (set it to empty).
     fn clear_jwt_user(&mut self);
+
+    fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>);
+
+    fn clear_jwt_custom_claims(&mut self);
 }
 
 impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
@@ -232,6 +278,15 @@ impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
             return Some(session.authorized_user.clone());
         }
         debug!("authorized_user returning None");
+        None
+    }
+
+    fn valid_custom_claims(&self) -> Option<&BTreeMap<String, Json>> {
+        if let Some(custom_session) = self.extensions().get::<CustomSession>() {
+            debug!("Got a session with custom claims: {:?}", custom_session);
+            return Some(&custom_session.claims);
+        }
+        debug!("valid_custom_claims returning None");
         None
     }
 }
@@ -253,41 +308,42 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
             };
 
         match (location, token, expiration) {
-            (Some(TokenLocation::Cookie(name)),
-             Some(token),
-             Some(expiration)) => {
-                // Note: We should set secure to true on the cookie
-                // but the example server is only http.
-                let mut cookie = CookiePair::new(name, token);
-                cookie.max_age = Some(expiration);
-                debug!("Setting new cookie with token {}", cookie);
-                self.set(SetCookie(vec![cookie]));
-            }
-            (Some(TokenLocation::AuthorizationHeader), Some(token), _) => {
-                debug!("Setting new auth header with token {}", token);
-                self.headers_mut().set(Authorization(Bearer { token: token }));
+            (Some(location), Some(token), Some(expiration)) => {
+                set_jwt(self, location, token, expiration)
             }
             (_, _, _) => {}
         }
     }
-    fn clear_jwt_user(&mut self) {
-        let location = match self.extensions().get::<SessionMiddleware>() {
-            Some(sm) => Some(sm.location.clone()),
-            None => None,
-        };
 
-        match location {
-            Some(TokenLocation::Cookie(name)) => {
-                let mut gone = CookiePair::new(name, "".to_owned());
-                gone.max_age = Some(0);
-                self.set(SetCookie(vec![gone]));
+    fn clear_jwt_user(&mut self) {
+        clear_jwt(self);
+    }
+
+    fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>) {
+        debug!("Should set custom claims jwt for {:?}", claims);
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token_custom_claims(claims),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
+
+        match (location, token, expiration) {
+            (Some(location), Some(token), Some(expiration)) => {
+                set_jwt(self, location, token, expiration)
             }
-            Some(TokenLocation::AuthorizationHeader) => {
-                self.headers_mut()
-                    .set(Authorization(Bearer { token: "".to_owned() }));
-            }
-            None => {}
+            (_, _, _) => {}
         }
+    }
+
+    fn clear_jwt_custom_claims(&mut self) {
+        clear_jwt(self);
     }
 }
 
@@ -299,6 +355,53 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
 fn current_numeric_date() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap().as_secs()
+}
+
+
+/// Set the token in the specified location to be valid for the expiration
+/// time specified from the current time.
+fn set_jwt<'a, D>(response: &mut Response<'a, D>,
+           location: TokenLocation,
+           token: String,
+           expiration: u64) {
+   match location {
+       TokenLocation::Cookie(name) => {
+           // Note: We should set secure to true on the cookie
+           // but the example server is only http.
+           let mut cookie = CookiePair::new(name, token);
+           cookie.max_age = Some(expiration);
+           debug!("Setting new cookie with token {}", cookie);
+           response.set(SetCookie(vec![cookie]));
+       }
+       TokenLocation::AuthorizationHeader => {
+           debug!("Setting new auth header with token {}", token);
+           response.headers_mut().set(Authorization(Bearer { token: token }));
+       }
+   }
+}
+
+/// Clear any jwt data stored.
+///
+/// The response will clear the jwt cookie (set it to empty with
+/// zero max_age) or Authorization: Bearer header (set it to empty).
+fn clear_jwt<'a, D>(response: &mut Response<'a, D>) {
+    let location = match response.extensions().get::<SessionMiddleware>() {
+        Some(sm) => Some(sm.location.clone()),
+        None => None,
+    };
+
+    match location {
+        Some(TokenLocation::Cookie(name)) => {
+            let mut gone = CookiePair::new(name, "".to_owned());
+            gone.max_age = Some(0);
+            response.set(SetCookie(vec![gone]));
+        }
+        Some(TokenLocation::AuthorizationHeader) => {
+            response.headers_mut()
+                .set(Authorization(Bearer { token: "".to_owned() }));
+        }
+        None => {}
+    }
 }
 
 #[cfg(test)]
