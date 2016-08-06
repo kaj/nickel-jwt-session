@@ -6,13 +6,13 @@
 //! the token is added to the request.
 //!
 //! Basic usage supports setting and clearing a username with the
-//! `set_jwt_user()` and `clear_jwt_user()` methods on
+//! `set_jwt_user()` and `clear_jwt()` methods on
 //! `SessionResponseExtensions`, and accessing an authorized user's username
 //! through the `SessionRequestExtensions` method `authorized_user()`.
 //!
 //! If instead of a username, you would like to store arbitrary data in the
 //! jwt claims payload, use the `set_jwt_custom_claims()` and
-//! `clear_jwt_custom_claims()` methods on `SessionResponseExtensions`, and
+//! `clear_jwt()` methods on `SessionResponseExtensions`, and
 //! access the data on a valid token using the `SessionRequestExtensions` method
 //! `valid_custom_claims()`.
 //!
@@ -269,12 +269,6 @@ pub trait SessionResponseExtensions {
     /// the `SessionMiddleware` from the current time.
     fn set_jwt_user(&mut self, user: &str);
 
-    /// Clear the user.
-    ///
-    /// The response will clear the jwt cookie (set it to empty with
-    /// zero max_age) or Authorization: Bearer header (set it to empty).
-    fn clear_jwt_user(&mut self);
-
     /// Set the custom jwt claims data.
     ///
     /// A jwt cookie or an Authorization: Bearer header signed with the
@@ -286,11 +280,11 @@ pub trait SessionResponseExtensions {
     /// the `SessionMiddleware` from the current time.
     fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>);
 
-    /// Clear the custom jwt claims data.
+    /// Clear the jwt.
     ///
     /// The response will clear the jwt cookie (set it to empty with
     /// zero max_age) or Authorization: Bearer header (set it to empty).
-    fn clear_jwt_custom_claims(&mut self);
+    fn clear_jwt(&mut self);
 }
 
 impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
@@ -337,10 +331,6 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         }
     }
 
-    fn clear_jwt_user(&mut self) {
-        clear_jwt(self);
-    }
-
     fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>) {
         debug!("Should set custom claims jwt for {:?}", claims);
         let (location, token, expiration) =
@@ -364,8 +354,24 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         }
     }
 
-    fn clear_jwt_custom_claims(&mut self) {
-        clear_jwt(self);
+    fn clear_jwt(&mut self) {
+        let location = match self.extensions().get::<SessionMiddleware>() {
+            Some(sm) => Some(sm.location.clone()),
+            None => None,
+        };
+
+        match location {
+            Some(TokenLocation::Cookie(name)) => {
+                let mut gone = CookiePair::new(name, "".to_owned());
+                gone.max_age = Some(0);
+                self.set(SetCookie(vec![gone]));
+            }
+            Some(TokenLocation::AuthorizationHeader) => {
+                self.headers_mut()
+                    .set(Authorization(Bearer { token: "".to_owned() }));
+            }
+            None => {}
+        }
     }
 }
 
@@ -400,30 +406,6 @@ fn set_jwt<'a, D>(response: &mut Response<'a, D>,
            response.headers_mut().set(Authorization(Bearer { token: token }));
        }
    }
-}
-
-/// Clear any jwt data stored.
-///
-/// The response will clear the jwt cookie (set it to empty with
-/// zero max_age) or Authorization: Bearer header (set it to empty).
-fn clear_jwt<'a, D>(response: &mut Response<'a, D>) {
-    let location = match response.extensions().get::<SessionMiddleware>() {
-        Some(sm) => Some(sm.location.clone()),
-        None => None,
-    };
-
-    match location {
-        Some(TokenLocation::Cookie(name)) => {
-            let mut gone = CookiePair::new(name, "".to_owned());
-            gone.max_age = Some(0);
-            response.set(SetCookie(vec![gone]));
-        }
-        Some(TokenLocation::AuthorizationHeader) => {
-            response.headers_mut()
-                .set(Authorization(Bearer { token: "".to_owned() }));
-        }
-        None => {}
-    }
 }
 
 #[cfg(test)]

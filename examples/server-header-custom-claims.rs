@@ -51,7 +51,7 @@ fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
 
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
-    res.clear_jwt_custom_claims();
+    res.clear_jwt();
     res.redirect("/")
 }
 

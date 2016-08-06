@@ -75,7 +75,7 @@ fn main() {
 
 ### Username only
 
-If you only want to store a username, you can use the `set_jwt_user()`, `clear_jwt_user()`, and `authorized_user()` convenience methods.
+If you only want to store a username, you can use the `set_jwt_user()`, `clear_jwt()`, and `authorized_user()` convenience methods.
 
 When you have a user that you have authenticated, use the `set_jwt_user()` method to put a new token for that user into the response:
 
@@ -109,19 +109,19 @@ fn private<'mw>(req: &mut Request, res: Response<'mw>)
 }
 ```
 
-And to log a user out, call the `clear_jwt_user()` method:
+And to log a user out, call the `clear_jwt()` method:
 
 ```rust
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
                -> MiddlewareResult<'mw> {
-    res.clear_jwt_user();
+    res.clear_jwt();
     res.redirect("/")
 }
 ```
 
 ### Customized claims payload
 
-If you would like to store arbitrary data in the claims payload instead of a username, use the `set_jwt_custom_claims()`, `clear_jwt_custom_claims()`, and `valid_custom_claims()` methods. The custom claims must be in a `BTreeMap<String, Json>`.
+If you would like to store arbitrary data in the claims payload instead of a username, use the `set_jwt_custom_claims()` and `valid_custom_claims()` methods. The custom claims must be in a `BTreeMap<String, Json>`. Logging out is still done with the `clear_jwt()` method.
 
 When you have successfully authenticated, use the `set_jwt_custom_claims()` method to put a new token with the data you include into the response:
 
@@ -160,12 +160,12 @@ fn private<'mw>(req: &mut Request, res: Response<'mw>)
 }
 ```
 
-And to end a session, call the `clear_jwt_custom_claims()` method:
+And to end a session, call the `clear_jwt()` method:
 
 ```rust
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
                -> MiddlewareResult<'mw> {
-    res.clear_jwt_custom_claims();
+    res.clear_jwt();
     res.redirect("/")
 }
 ```

@@ -15,7 +15,7 @@ fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
     server.utilize(SessionMiddleware::new("My very secret key")
-                   .expiration_time(5)); // Short, to see expiration.
+                   .expiration_time(60)); // Short, to see expiration.
 
     server.get("/",   public);
     server.get("/login", login);
@@ -43,7 +43,7 @@ fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
 
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
-    res.clear_jwt_user();
+    res.clear_jwt();
     res.redirect("/")
 }
 
