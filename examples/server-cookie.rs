@@ -52,7 +52,7 @@ fn private<'mw>(req: &mut Request, res: Response<'mw>)
     match req.authorized_user() {
         Some(user) => {
             let mut data = HashMap::new();
-            data.insert("who", user);
+            data.insert("full_name", user);
             res.render("examples/templates/private.tpl", &data)
         }
         None => res.error(StatusCode::Forbidden, "Permission denied")

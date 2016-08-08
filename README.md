@@ -119,7 +119,7 @@ fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
 }
 ```
 
-### Customized claims payload
+### Customized claims payload only
 
 If you would like to store arbitrary data in the claims payload instead of a username, use the `set_jwt_custom_claims()` and `valid_custom_claims()` methods. The custom claims must be in a `BTreeMap<String, Json>`. Logging out is still done with the `clear_jwt()` method.
 
@@ -156,6 +156,55 @@ fn private<'mw>(req: &mut Request, res: Response<'mw>)
             // Whatever you do with valid data in the claims
         },
         None => res.error(StatusCode::Forbidden, "Permission denied"),
+    }
+}
+```
+
+And to end a session, call the `clear_jwt()` method:
+
+```rust
+fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
+               -> MiddlewareResult<'mw> {
+    res.clear_jwt();
+    res.redirect("/")
+}
+```
+
+### Username and customized claims payload
+
+If you would like to store *both* a username and arbitrary claims data, use the `set_jwt_user_and_custom_claims()` method to add the username and data to the token. You may then use both the `authorized_user()` and `valid_custom_claims()` methods, to get the username and the claims data, respectively. For example:
+
+```rust
+use std::collections::BTreeMap;
+
+fn login<'mw>(req: &mut Request, mut res: Response<'mw>)
+              -> MiddlewareResult<'mw> {
+    let authentication_data = your_authentication_method(req);
+    match authentication_data {
+        Some(data) => {
+            let mut d = BTreeMap::new();
+            d.insert("full_name".to_owned(), data.full_name);
+            d.insert("admin".to_owned(), data.admin);
+            res.set_jwt_user_and_custom_claims(data.username, d);
+            res.redirect("/")
+        }
+        None => {
+            res.redirect("/login")
+        }
+    }
+}
+```
+
+To get the username and claims out if the token is valid, use the `authorized_user()` and `valid_custom_claims()` methods:
+
+```rust
+fn private<'mw>(req: &mut Request, res: Response<'mw>)
+                -> MiddlewareResult<'mw> {
+    match (req.authorized_user(), req.valid_custom_claims()) {
+        (Some(username), Some(data)) => {
+            // Whatever you do with a username and claims data
+        },
+        (_, _) => res.error(StatusCode::Forbidden, "Permission denied"),
     }
 }
 ```

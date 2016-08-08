@@ -9,7 +9,7 @@ extern crate rustc_serialize;
 use nickel::{HttpRouter, Nickel, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
 use nickel_jwt_session::{SessionMiddleware, SessionRequestExtensions, SessionResponseExtensions, TokenLocation};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use nickel::extensions::Redirect;
 use rustc_serialize::json::ToJson;
 
@@ -30,11 +30,9 @@ fn main() {
 
 fn public<'mw>(req: &mut Request, res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
-    let mut default_data = BTreeMap::new();
-    default_data.insert("who".to_owned(), "world".to_json());
-
-    let data = req.valid_custom_claims().unwrap_or(&default_data);
-    res.render("examples/templates/public.tpl", data)
+    let mut data = HashMap::new();
+    data.insert("who", req.authorized_user().unwrap_or("world".to_owned()));
+    res.render("examples/templates/public.tpl", &data)
 }
 
 fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
@@ -43,9 +41,9 @@ fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
     // ticket or something, but in this example, we just consider
     // "carl" logged in.
     let mut d = BTreeMap::new();
-    d.insert("who".to_owned(), "carl".to_json());
+    d.insert("full_name".to_owned(), "Carl Smith".to_json());
     d.insert("admin".to_owned(), true.to_json());
-    res.set_jwt_custom_claims(d);
+    res.set_jwt_user_and_custom_claims("carl", d);
     res.redirect("/")
 }
 
