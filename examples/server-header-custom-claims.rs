@@ -4,18 +4,20 @@ extern crate nickel_jwt_session;
 extern crate cookie;
 extern crate hyper;
 extern crate env_logger;
+extern crate rustc_serialize;
 
 use nickel::{HttpRouter, Nickel, Request, Response, MiddlewareResult};
 use nickel::status::StatusCode;
 use nickel_jwt_session::{SessionMiddleware, SessionRequestExtensions, SessionResponseExtensions, TokenLocation};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use nickel::extensions::Redirect;
+use rustc_serialize::json::ToJson;
 
 fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
     server.utilize(SessionMiddleware::new("My very secret key")
-                   .expiration_time(10)// Short, to see expiration.
+                   .expiration_time(60)// Short, to see expiration.
                    .using(TokenLocation::AuthorizationHeader));
 
     server.get("/",   public);
@@ -38,23 +40,24 @@ fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
     // A real login view would get a username/password pair or a CAS
     // ticket or something, but in this example, we just consider
     // "carl" logged in.
-    res.set_jwt_user("carl");
+    let mut d = BTreeMap::new();
+    d.insert("full_name".to_owned(), "Carl Smith".to_json());
+    d.insert("admin".to_owned(), true.to_json());
+    res.set_jwt_user_and_custom_claims("carl", d);
     res.redirect("/")
 }
 
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
-    res.clear_jwt_user();
+    res.clear_jwt();
     res.redirect("/")
 }
 
 fn private<'mw>(req: &mut Request, res: Response<'mw>)
                 -> MiddlewareResult<'mw>  {
-    match req.authorized_user() {
-        Some(user) => {
-            let mut data = HashMap::new();
-            data.insert("who", user);
-            res.render("examples/templates/private.tpl", &data)
+    match req.valid_custom_claims() {
+        Some(claims) => {
+            res.render("examples/templates/private.tpl", &claims)
         }
         None => res.error(StatusCode::Forbidden, "Permission denied")
     }

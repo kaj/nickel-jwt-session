@@ -15,7 +15,7 @@ fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
     server.utilize(SessionMiddleware::new("My very secret key")
-                   .expiration_time(5)); // Short, to see expiration.
+                   .expiration_time(60)); // Short, to see expiration.
 
     server.get("/",   public);
     server.get("/login", login);
@@ -43,7 +43,7 @@ fn login<'mw>(_req: &mut Request, mut res: Response<'mw>)
 
 fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
                -> MiddlewareResult<'mw>  {
-    res.clear_jwt_user();
+    res.clear_jwt();
     res.redirect("/")
 }
 
@@ -52,7 +52,7 @@ fn private<'mw>(req: &mut Request, res: Response<'mw>)
     match req.authorized_user() {
         Some(user) => {
             let mut data = HashMap::new();
-            data.insert("who", user);
+            data.insert("full_name", user);
             res.render("examples/templates/private.tpl", &data)
         }
         None => res.error(StatusCode::Forbidden, "Permission denied")

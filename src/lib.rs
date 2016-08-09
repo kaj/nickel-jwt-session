@@ -2,15 +2,19 @@
 //!
 //! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
 //! cookie or Authorization: Bearer header, depending on configuration,
-//! and if it finds contains a valid, properly signed jwt token, an
-//! authorized_user session is added to the request.
+//! and if it finds contains a valid, properly signed jwt token, data from
+//! the token is added to the request.
 //!
-//! Further middlewares and views can get the authorized user through
-//! the `SessionRequestExtensions` method `authorized_user`.
+//! Basic usage supports setting and clearing a username with the
+//! `set_jwt_user()` and `clear_jwt()` methods on
+//! `SessionResponseExtensions`, and accessing an authorized user's username
+//! through the `SessionRequestExtensions` method `authorized_user()`.
 //!
-//! Also, the response is extended with `SessionResponseExtensions`,
-//! which can be used to set the user (login) or clear the user
-//! (logout).
+//! If instead of a username, you would like to store arbitrary data in the
+//! jwt claims payload, use the `set_jwt_custom_claims()` and
+//! `clear_jwt()` methods on `SessionResponseExtensions`, and
+//! access the data on a valid token using the `SessionRequestExtensions` method
+//! `valid_custom_claims()`.
 //!
 //! Working usage examples exist in [the examples directory]
 //! (https://github.com/kaj/nickel-jwt-session/tree/master/examples).
@@ -24,15 +28,18 @@ extern crate cookie;
 extern crate hyper;
 #[macro_use]
 extern crate log;
+extern crate rustc_serialize;
 
 use cookie::Cookie as CookiePair;
 use crypto::sha2::Sha256;
 use hyper::header::{Authorization, Bearer, SetCookie};
 use hyper::header;
-use jwt::{Header, Registered, Token};
+use jwt::{Claims, Header, Registered, Token};
 use nickel::{Continue, Middleware, MiddlewareResult, Request, Response};
 use plugin::Extensible;
 use std::default::Default;
+use std::collections::BTreeMap;
+use rustc_serialize::json::Json;
 use typemap::Key;
 
 /// The middleware itself.
@@ -88,15 +95,18 @@ impl SessionMiddleware {
         self
     }
 
-    fn make_token(&self, user: &str) -> Option<String> {
+    fn make_token(&self, user: Option<&str>, custom_claims: Option<BTreeMap<String, Json>>) -> Option<String> {
         let header: Header = Default::default();
         let now = current_numeric_date();
-        let claims = Registered {
-            iss: self.issuer.clone(),
-            sub: Some(user.into()),
-            exp: Some(now + self.expiration_time),
-            nbf: Some(now),
-            ..Default::default()
+        let claims = Claims {
+            reg: Registered {
+                iss: self.issuer.clone(),
+                sub: user.map(Into::into),
+                exp: Some(now + self.expiration_time),
+                nbf: Some(now),
+                ..Default::default()
+            },
+            private: custom_claims.unwrap_or(BTreeMap::new()),
         };
         let token = Token::new(header, claims);
         token.signed(self.server_key.as_ref(), Sha256::new()).ok()
@@ -108,11 +118,19 @@ struct Session {
     authorized_user: String,
 }
 
+#[derive(Debug)]
+struct CustomSession {
+    claims: BTreeMap<String, Json>,
+}
+
 impl Key for SessionMiddleware {
     type Value = SessionMiddleware;
 }
 impl Key for Session {
     type Value = Session;
+}
+impl Key for CustomSession {
+    type Value = CustomSession;
 }
 
 fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
@@ -146,26 +164,26 @@ impl<D> Middleware<D> for SessionMiddleware {
         };
 
         if let Some(jwtstr) = jwtstr {
-            match Token::<Header, Registered>::parse(&jwtstr) {
+            match Token::<Header, Claims>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
                         debug!("Verified token for: {:?}", token.claims);
                         let now = current_numeric_date();
-                        if let Some(nbf) = token.claims.nbf {
+                        if let Some(nbf) = token.claims.reg.nbf {
                             if now < nbf {
                                 warn!("Got a not-yet valid token: {:?}",
                                       token.claims);
                                 return Ok(Continue(res));
                             }
                         }
-                        if let Some(exp) = token.claims.exp {
+                        if let Some(exp) = token.claims.reg.exp {
                             if now > exp {
                                 warn!("Got an expired token: {:?}",
                                       token.claims);
                                 return Ok(Continue(res));
                             }
                         }
-                        if let Some(user) = token.claims.sub {
+                        if let Some(user) = token.claims.reg.sub {
                             info!("User {:?} is authorized for {} on {}",
                                   user,
                                   req.origin.remote_addr,
@@ -173,6 +191,17 @@ impl<D> Middleware<D> for SessionMiddleware {
                             req.extensions_mut()
                                .insert::<Session>(Session {
                                    authorized_user: user,
+                               });
+                        }
+                        let custom_claims = token.claims.private;
+                        if !custom_claims.is_empty() {
+                            info!("Custom claims {:?} are valid for {} on {}",
+                                  custom_claims,
+                                  req.origin.remote_addr,
+                                  req.origin.uri);
+                            req.extensions_mut()
+                               .insert::<CustomSession>(CustomSession {
+                                   claims: custom_claims,
                                });
                         }
                     } else {
@@ -192,37 +221,51 @@ impl<D> Middleware<D> for SessionMiddleware {
 /// Extension trait for the request.
 ///
 /// This trait is implemented for `nickel::Request`.
-/// Use this trait to be able to get the authorized user for a nickel
+/// Use this trait to be able to get the token info for a nickel
 /// request.
 pub trait SessionRequestExtensions {
-    /// Check if there is an authorized user.
+    /// Check if there is a valid token with an authorized user.
     ///
-    /// If there is an authorized user, Some(username) is returned,
-    /// otherwise, None is returned.
+    /// If there is a valid token that has a username, Some(username)
+    /// is returned, otherwise, None is returned.
     fn authorized_user(&self) -> Option<String>;
+
+    /// Check if there is a valid token with custom claims data.
+    ///
+    /// If there is a valid token that has custom claims set,
+    /// Some(&BTreeMap<String, Json>) is returned, otherwise, None is returned.
+    fn valid_custom_claims(&self) -> Option<&BTreeMap<String, Json>>;
 }
 
 /// Extension trait for the response.
 ///
 /// This trait is implemented for `nickel::Response`.
+/// A jwt cookie or an Authorization: Bearer header signed with the
+/// secret key will be added to the response.
+/// It is the responsibility of the caller to actually validate
+/// the user (e.g. by password, or by CAS or some other mechanism)
+/// before calling this method.
+/// The token will be valid for the expiration_time specified on
+/// the `SessionMiddleware` from the current time.
 /// Use this trait to be able to set and clear a jwt token on a nickel
 /// response.
 pub trait SessionResponseExtensions {
-    /// Set the user.
-    ///
-    /// A jwt cookie or an Authorization: Bearer header signed with the
-    /// secret key will be added to the response.
-    /// It is the responsibility of the caller to actually validate
-    /// the user (e.g. by password, or by CAS or some other mechanism)
-    /// before calling this method.
-    /// The token will be valid for the expiration_time specified on
-    /// the `SessionMiddleware` from the current time.
+    /// Set the user. Convenience method for cases with only a username and
+    /// no custom claims.
     fn set_jwt_user(&mut self, user: &str);
-    /// Clear the user.
+
+    /// Set the custom jwt claims data. Convenience method for cases with only
+    /// custom claims and without a username.
+    fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>);
+
+    /// Set both the user and custom claims.
+    fn set_jwt_user_and_custom_claims(&mut self, user: &str, claims: BTreeMap<String, Json>);
+
+    /// Clear the jwt.
     ///
     /// The response will clear the jwt cookie (set it to empty with
     /// zero max_age) or Authorization: Bearer header (set it to empty).
-    fn clear_jwt_user(&mut self);
+    fn clear_jwt(&mut self);
 }
 
 impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
@@ -234,6 +277,15 @@ impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
         debug!("authorized_user returning None");
         None
     }
+
+    fn valid_custom_claims(&self) -> Option<&BTreeMap<String, Json>> {
+        if let Some(custom_session) = self.extensions().get::<CustomSession>() {
+            debug!("Got a session with custom claims: {:?}", custom_session);
+            return Some(&custom_session.claims);
+        }
+        debug!("valid_custom_claims returning None");
+        None
+    }
 }
 
 impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
@@ -243,7 +295,7 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
             match self.extensions().get::<SessionMiddleware>() {
                 Some(sm) => {
                     (Some(sm.location.clone()),
-                     sm.make_token(user),
+                     sm.make_token(Some(user), None),
                      Some(sm.expiration_time))
                 }
                 None => {
@@ -253,24 +305,60 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
             };
 
         match (location, token, expiration) {
-            (Some(TokenLocation::Cookie(name)),
-             Some(token),
-             Some(expiration)) => {
-                // Note: We should set secure to true on the cookie
-                // but the example server is only http.
-                let mut cookie = CookiePair::new(name, token);
-                cookie.max_age = Some(expiration);
-                debug!("Setting new cookie with token {}", cookie);
-                self.set(SetCookie(vec![cookie]));
-            }
-            (Some(TokenLocation::AuthorizationHeader), Some(token), _) => {
-                debug!("Setting new auth header with token {}", token);
-                self.headers_mut().set(Authorization(Bearer { token: token }));
+            (Some(location), Some(token), Some(expiration)) => {
+                set_jwt(self, location, token, expiration)
             }
             (_, _, _) => {}
         }
     }
-    fn clear_jwt_user(&mut self) {
+
+    fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>) {
+        debug!("Should set custom claims jwt for {:?}", claims);
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token(None, Some(claims)),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
+
+        match (location, token, expiration) {
+            (Some(location), Some(token), Some(expiration)) => {
+                set_jwt(self, location, token, expiration)
+            }
+            (_, _, _) => {}
+        }
+    }
+
+    fn set_jwt_user_and_custom_claims(&mut self, user: &str, claims: BTreeMap<String, Json>) {
+        debug!("Should set a user and custom claims jwt for {}, {:?}", user, claims);
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token(Some(user), Some(claims)),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
+
+        match (location, token, expiration) {
+            (Some(location), Some(token), Some(expiration)) => {
+                set_jwt(self, location, token, expiration)
+            }
+            (_, _, _) => {}
+        }
+    }
+
+    fn clear_jwt(&mut self) {
         let location = match self.extensions().get::<SessionMiddleware>() {
             Some(sm) => Some(sm.location.clone()),
             None => None,
@@ -299,6 +387,29 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
 fn current_numeric_date() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now().duration_since(UNIX_EPOCH).ok().unwrap().as_secs()
+}
+
+
+/// Set the token in the specified location to be valid for the expiration
+/// time specified from the current time.
+fn set_jwt<'a, D>(response: &mut Response<'a, D>,
+           location: TokenLocation,
+           token: String,
+           expiration: u64) {
+   match location {
+       TokenLocation::Cookie(name) => {
+           // Note: We should set secure to true on the cookie
+           // but the example server is only http.
+           let mut cookie = CookiePair::new(name, token);
+           cookie.max_age = Some(expiration);
+           debug!("Setting new cookie with token {}", cookie);
+           response.set(SetCookie(vec![cookie]));
+       }
+       TokenLocation::AuthorizationHeader => {
+           debug!("Setting new auth header with token {}", token);
+           response.headers_mut().set(Authorization(Bearer { token: token }));
+       }
+   }
 }
 
 #[cfg(test)]
