@@ -1,4 +1,6 @@
 language: rust
+cache: cargo
+before_script: (cargo install rustfmt || true)
 rust:
   - stable
   - beta
@@ -6,3 +8,8 @@ rust:
 matrix:
   allow_failures:
     - rust: nightly
+script:
+- |
+  cargo fmt -- --write-mode=diff &&
+  cargo build &&
+  cargo test
