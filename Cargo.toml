@@ -7,6 +7,7 @@ authors = [
 ]
 description = "A nickel middleware for jwt-based user sessions."
 repository = "https://github.com/kaj/nickel-jwt-session"
+keywords = ["nickel", "jwt", "claims", "session", "login", "json web token"]
 readme = "README.md"
 license = "MIT/Apache-2.0"
 documentation = "https://rasmus.krats.se/doc/nickel-jwt-session/0.3.0/nickel_jwt_session/"
