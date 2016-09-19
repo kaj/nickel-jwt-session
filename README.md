@@ -223,7 +223,7 @@ fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
 
 Full working examples can be found in the [examples](examples) directory.
 Read the [API documentation]
-(https://rasmus.krats.se/doc/nickel-jwt-session/0.3.0/nickel_jwt_session/).
+(https://rasmus.krats.se/doc/nickel-jwt-session/0.4.0/nickel_jwt_session/).
 
 ## License
 
