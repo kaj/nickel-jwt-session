@@ -76,19 +76,25 @@ impl SessionMiddleware {
     }
 
     /// Set a value for the iss (issuer) jwt claim.
+    ///
+    /// The default is to not set an issuer.
     pub fn issuer(mut self, issuer: &str) -> Self {
         self.issuer = Some(issuer.to_owned());
         self
     }
 
     /// Set how long a token should be valid after creation (in seconds).
+    ///
+    /// The default is 24 hours.
     pub fn expiration_time(mut self, expiration_time: u64) -> Self {
         self.expiration_time = expiration_time;
         self
     }
 
-    /// Set where the token should be stored, either in a cookie with a
-    /// specified name or in the Authorization: Bearer header.
+    /// Set where the token should be stored.
+    ///
+    /// The default is `TokenLocation::Cookie("jwt")`. Alternatively,
+    /// the token can be set in the `Authorization: Bearer` header.
     pub fn using(mut self, location: TokenLocation) -> Self {
         self.location = location;
         self
