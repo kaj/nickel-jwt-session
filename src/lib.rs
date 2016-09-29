@@ -367,6 +367,7 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
     }
 
     fn clear_jwt(&mut self) {
+        debug!("Should clear jwt");
         let location = match self.extensions().get::<SessionMiddleware>() {
             Some(sm) => Some(sm.location.clone()),
             None => None,
