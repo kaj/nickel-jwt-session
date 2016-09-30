@@ -1,8 +1,8 @@
 //! An experimental middleware for jwt-based login for nickel.
 //!
 //! When the `SessionMiddleware` is invoked, it checks if there is a "jwt"
-//! cookie or Authorization: Bearer header, depending on configuration,
-//! and if it finds contains a valid, properly signed jwt token, data from
+//! cookie or `Authorization: Bearer` header, depending on configuration.
+//! If it finds a valid, properly signed jwt token, data from
 //! the token is added to the request.
 //!
 //! Basic usage supports setting and clearing a username with the
@@ -10,7 +10,7 @@
 //! `SessionResponseExtensions`, and accessing an authorized user's username
 //! through the `SessionRequestExtensions` method `authorized_user()`.
 //!
-//! If instead of a username, you would like to store arbitrary data in the
+//! If, instead of a username, you would like to store arbitrary data in the
 //! jwt claims payload, use the `set_jwt_custom_claims()` and
 //! `clear_jwt()` methods on `SessionResponseExtensions`, and
 //! access the data on a valid token using the `SessionRequestExtensions` method
