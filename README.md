@@ -5,6 +5,7 @@ Suggestions for improvements are welcome.
 
 [![Build Status](https://travis-ci.org/kaj/nickel-jwt-session.svg?branch=master)]
 (https://travis-ci.org/kaj/nickel-jwt-session)
+[![Crate](https://meritbadge.herokuapp.com/nickel-jwt-session)](https://crates.io/crates/nickel-jwt-session)
 
 ## Configuration
 
@@ -222,8 +223,7 @@ fn logout<'mw>(_req: &mut Request, mut res: Response<'mw>)
 ## Examples
 
 Full working examples can be found in the [examples](examples) directory.
-Read the [API documentation]
-(https://rasmus.krats.se/doc/nickel-jwt-session/0.4.0/nickel_jwt_session/).
+Read the [API documentation](https://docs.rs/nickel-jwt-session/).
 
 ## License
 
