@@ -34,7 +34,7 @@ fn main() {
     let authorization_required = AuthorizationRequired::new(router);
     server.utilize(authorization_required);
 
-    server.listen("127.0.0.1:6767");
+    server.listen("127.0.0.1:6767").expect("listen");
 }
 
 fn public<'mw>(req: &mut Request, res: Response<'mw>) -> MiddlewareResult<'mw> {

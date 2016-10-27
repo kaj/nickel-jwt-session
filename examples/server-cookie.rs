@@ -22,7 +22,7 @@ fn main() {
     server.get("/logout", logout);
     server.get("/private", private);
 
-    server.listen("127.0.0.1:6767");
+    server.listen("127.0.0.1:6767").expect("listen");
 }
 
 fn public<'mw>(req: &mut Request, res: Response<'mw>)
