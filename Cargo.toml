@@ -20,6 +20,8 @@ typemap = "^0.3"
 jwt = "^0.4"
 cookie = { version = "^0.2", default-features = false }
 rust-crypto = "^0.2"
-env_logger = "^0.3"
 log = "^0.3"
 rustc-serialize = "^0.3"
+
+[dev-dependencies]
+env_logger = "^0.3"
