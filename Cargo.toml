@@ -14,11 +14,11 @@ documentation = "https://docs.rs/nickel-jwt-session/"
 
 [dependencies]
 nickel = "^0.9"
-hyper = "^0.9"
+hyper = { version = "^0.9", default-features = false }
 plugin = "^0.2"
 typemap = "^0.3"
 jwt = "^0.4"
-cookie = "^0.2"
+cookie = { version = "^0.2", default-features = false }
 rust-crypto = "^0.2"
 env_logger = "^0.3"
 log = "^0.3"
