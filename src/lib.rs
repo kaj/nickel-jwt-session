@@ -198,8 +198,8 @@ impl<D> Middleware<D> for SessionMiddleware {
                                   req.origin.uri);
                             req.extensions_mut()
                                 .insert::<Session>(Session {
-                                    authorized_user: user,
-                                });
+                                                       authorized_user: user,
+                                                   });
                         }
                         let custom_claims = token.claims.private;
                         if !custom_claims.is_empty() {
@@ -209,8 +209,9 @@ impl<D> Middleware<D> for SessionMiddleware {
                                   req.origin.uri);
                             req.extensions_mut()
                                 .insert::<CustomSession>(CustomSession {
-                                    claims: custom_claims,
-                                });
+                                                             claims:
+                                                                 custom_claims,
+                                                         });
                         }
                     } else {
                         info!("Invalid token {:?}", token);
@@ -301,18 +302,18 @@ impl<'a, 'b, D> SessionRequestExtensions for Request<'a, 'b, D> {
 impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
     fn set_jwt_user(&mut self, user: &str) {
         debug!("Should set a user jwt for {}", user);
-        let (location, token, expiration) = match self.extensions()
-            .get::<SessionMiddleware>() {
-            Some(sm) => {
-                (Some(sm.location.clone()),
-                 sm.make_token(Some(user), None),
-                 Some(sm.expiration_time))
-            }
-            None => {
-                warn!("No SessionMiddleware on response.  :-(");
-                (None, None, None)
-            }
-        };
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token(Some(user), None),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
 
         match (location, token, expiration) {
             (Some(location), Some(token), Some(expiration)) => {
@@ -324,18 +325,18 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
 
     fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>) {
         debug!("Should set custom claims jwt for {:?}", claims);
-        let (location, token, expiration) = match self.extensions()
-            .get::<SessionMiddleware>() {
-            Some(sm) => {
-                (Some(sm.location.clone()),
-                 sm.make_token(None, Some(claims)),
-                 Some(sm.expiration_time))
-            }
-            None => {
-                warn!("No SessionMiddleware on response.  :-(");
-                (None, None, None)
-            }
-        };
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token(None, Some(claims)),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
 
         match (location, token, expiration) {
             (Some(location), Some(token), Some(expiration)) => {
@@ -351,18 +352,18 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         debug!("Should set a user and custom claims jwt for {}, {:?}",
                user,
                claims);
-        let (location, token, expiration) = match self.extensions()
-            .get::<SessionMiddleware>() {
-            Some(sm) => {
-                (Some(sm.location.clone()),
-                 sm.make_token(Some(user), Some(claims)),
-                 Some(sm.expiration_time))
-            }
-            None => {
-                warn!("No SessionMiddleware on response.  :-(");
-                (None, None, None)
-            }
-        };
+        let (location, token, expiration) =
+            match self.extensions().get::<SessionMiddleware>() {
+                Some(sm) => {
+                    (Some(sm.location.clone()),
+                     sm.make_token(Some(user), Some(claims)),
+                     Some(sm.expiration_time))
+                }
+                None => {
+                    warn!("No SessionMiddleware on response.  :-(");
+                    (None, None, None)
+                }
+            };
 
         match (location, token, expiration) {
             (Some(location), Some(token), Some(expiration)) => {
@@ -386,8 +387,9 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
                 self.set(SetCookie(vec![gone]));
             }
             Some(TokenLocation::AuthorizationHeader) => {
-                self.headers_mut()
-                    .set(Authorization(Bearer { token: "".to_owned() }));
+                self.headers_mut().set(Authorization(Bearer {
+                                                         token: "".to_owned(),
+                                                     }));
             }
             None => {}
         }

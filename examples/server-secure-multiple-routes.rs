@@ -1,5 +1,4 @@
 //! A simple example server with login and session.
-#[macro_use]
 extern crate nickel;
 extern crate nickel_jwt_session;
 extern crate cookie;
@@ -9,12 +8,12 @@ extern crate rustc_serialize;
 
 use nickel::{HttpRouter, Middleware, MiddlewareResult, Nickel, NickelError,
              Request, Response, Router};
+use nickel::extensions::Redirect;
 use nickel::status::StatusCode;
 use nickel_jwt_session::{SessionMiddleware, SessionRequestExtensions,
                          SessionResponseExtensions, TokenLocation};
-use std::collections::{BTreeMap, HashMap};
-use nickel::extensions::Redirect;
 use rustc_serialize::json::ToJson;
+use std::collections::{BTreeMap, HashMap};
 
 fn main() {
     env_logger::init().unwrap();
@@ -67,9 +66,9 @@ fn private<'mw>(req: &mut Request,
                 res: Response<'mw>)
                 -> MiddlewareResult<'mw> {
     res.render("examples/templates/private.tpl",
-               &req.valid_custom_claims().expect("Already validated claims \
-                                                  in AuthorizationRequired \
-                                                  middleware"))
+               &req.valid_custom_claims()
+                    .expect("Already validated claims in \
+                             AuthorizationRequired middleware"))
 }
 
 pub struct AuthorizationRequired<M> {
