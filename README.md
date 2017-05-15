@@ -3,9 +3,9 @@
 Experimental jwt-based user session for nickel.
 Suggestions for improvements are welcome.
 
-[![Build Status](https://travis-ci.org/kaj/nickel-jwt-session.svg?branch=master)]
-(https://travis-ci.org/kaj/nickel-jwt-session)
+[![Build Status](https://travis-ci.org/kaj/nickel-jwt-session.svg?branch=master)](https://travis-ci.org/kaj/nickel-jwt-session)
 [![Crate](https://meritbadge.herokuapp.com/nickel-jwt-session)](https://crates.io/crates/nickel-jwt-session)
+[![docs](https://docs.rs/nickel-jwt-session/badge.svg)](https://docs.rs/nickel-jwt-session)
 
 ## Configuration
 
