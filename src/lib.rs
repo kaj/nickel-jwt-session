@@ -102,10 +102,11 @@ impl SessionMiddleware {
         self
     }
 
-    fn make_token(&self,
-                  user: Option<&str>,
-                  custom_claims: Option<BTreeMap<String, Json>>)
-                  -> Option<String> {
+    fn make_token(
+        &self,
+        user: Option<&str>,
+        custom_claims: Option<BTreeMap<String, Json>>
+    ) -> Option<String> {
         let header: Header = Default::default();
         let now = current_numeric_date();
         let claims = Claims {
@@ -143,9 +144,10 @@ impl Key for CustomSession {
     type Value = CustomSession;
 }
 
-fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
-                             name: &str)
-                             -> Option<String> {
+fn get_cookie<'mw, 'conn, D>(
+    req: &Request<'mw, 'conn, D>,
+    name: &str
+) -> Option<String> {
     if let Some(cookies) = req.origin.headers.get::<header::Cookie>() {
         for cookie in cookies.iter() {
             if let Ok(cookie) = Cookie::parse(cookie.to_string()) {
@@ -159,10 +161,11 @@ fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
 }
 
 impl<D> Middleware<D> for SessionMiddleware {
-    fn invoke<'mw, 'conn>(&self,
-                          req: &mut Request<'mw, 'conn, D>,
-                          mut res: Response<'mw, D>)
-                          -> MiddlewareResult<'mw, D> {
+    fn invoke<'mw, 'conn>(
+        &self,
+        req: &mut Request<'mw, 'conn, D>,
+        mut res: Response<'mw, D>
+    ) -> MiddlewareResult<'mw, D> {
         res.extensions_mut().insert::<SessionMiddleware>((*self).clone());
 
         let jwtstr = match self.location {
@@ -179,23 +182,22 @@ impl<D> Middleware<D> for SessionMiddleware {
             match Token::<Header, Claims>::parse(&jwtstr) {
                 Ok(token) => {
                     if token.verify(self.server_key.as_ref(), Sha256::new()) {
-                        debug!("Verified token for: {:?}", token.claims);
+                        let claims = token.claims;
+                        debug!("Verified token for: {:?}", claims);
                         let now = current_numeric_date();
-                        if let Some(nbf) = token.claims.reg.nbf {
+                        if let Some(nbf) = claims.reg.nbf {
                             if now < nbf {
-                                warn!("Got a not-yet valid token: {:?}",
-                                      token.claims);
+                                warn!("Got a not-yet valid token: {:?}", claims);
                                 return Ok(Continue(res));
                             }
                         }
-                        if let Some(exp) = token.claims.reg.exp {
+                        if let Some(exp) = claims.reg.exp {
                             if now > exp {
-                                warn!("Got an expired token: {:?}",
-                                      token.claims);
+                                warn!("Got an expired token: {:?}", claims);
                                 return Ok(Continue(res));
                             }
                         }
-                        if let Some(user) = token.claims.reg.sub {
+                        if let Some(user) = claims.reg.sub {
                             info!("User {:?} is authorized for {} on {}",
                                   user,
                                   req.origin.remote_addr,
@@ -205,7 +207,7 @@ impl<D> Middleware<D> for SessionMiddleware {
                                                        authorized_user: user,
                                                    });
                         }
-                        let custom_claims = token.claims.private;
+                        let custom_claims = claims.private;
                         if !custom_claims.is_empty() {
                             info!("Custom claims {:?} are valid for {} on {}",
                                   custom_claims,
