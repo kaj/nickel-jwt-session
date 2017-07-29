@@ -23,7 +23,7 @@ cookie = { version = "^0.9", default-features = false }
 rust-crypto = "^0.2"
 log = "^0.3"
 rustc-serialize = "^0.3"
-time = "*"
+time = "^0.1"
 
 [dev-dependencies]
 env_logger = "^0.4"
