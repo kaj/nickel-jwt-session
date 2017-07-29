@@ -5,6 +5,7 @@ extern crate hyper;
 extern crate nickel;
 extern crate nickel_jwt_session;
 extern crate rustc_serialize;
+extern crate time;
 
 use nickel::{HttpRouter, MiddlewareResult, Nickel, Request, Response};
 use nickel::extensions::Redirect;
@@ -12,13 +13,15 @@ use nickel::status::StatusCode;
 use nickel_jwt_session::*;
 use rustc_serialize::json::ToJson;
 use std::collections::{BTreeMap, HashMap};
+use time::Duration;
 
 fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
+    // Use SessionMiddleware, with short expiration, to see it expire.
     server.utilize(SessionMiddleware::new("My very secret key")
-                   .expiration_time(60)// Short, to see expiration.
-                   .using(TokenLocation::AuthorizationHeader));
+                       .expiration_time(Duration::minutes(1))
+                       .using(TokenLocation::AuthorizationHeader));
 
     server.get("/", public);
     server.get("/login", login);

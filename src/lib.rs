@@ -29,8 +29,9 @@ extern crate hyper;
 #[macro_use]
 extern crate log;
 extern crate rustc_serialize;
+extern crate time;
 
-use cookie::Cookie as CookiePair;
+use cookie::Cookie;
 use crypto::sha2::Sha256;
 use hyper::header::{self, Authorization, Bearer, SetCookie};
 use jwt::{Claims, Header, Registered, Token};
@@ -39,6 +40,7 @@ use plugin::Extensible;
 use rustc_serialize::json::Json;
 use std::collections::BTreeMap;
 use std::default::Default;
+use time::Duration;
 use typemap::Key;
 
 /// The middleware itself.
@@ -50,7 +52,7 @@ pub struct SessionMiddleware {
     /// Value for the iss (issuer) jwt claim.
     issuer: Option<String>,
     /// How long a token should be valid after creation, in seconds
-    expiration_time: u64,
+    expiration_time: Duration,
     /// Where to put the token to be returned
     location: TokenLocation,
 }
@@ -70,7 +72,7 @@ impl SessionMiddleware {
         SessionMiddleware {
             server_key: server_key.to_owned(),
             issuer: None,
-            expiration_time: 24 * 60 * 60,
+            expiration_time: Duration::days(1),
             location: TokenLocation::Cookie("jwt".to_owned()),
         }
     }
@@ -86,7 +88,7 @@ impl SessionMiddleware {
     /// Set how long a token should be valid after creation (in seconds).
     ///
     /// The default is 24 hours.
-    pub fn expiration_time(mut self, expiration_time: u64) -> Self {
+    pub fn expiration_time(mut self, expiration_time: Duration) -> Self {
         self.expiration_time = expiration_time;
         self
     }
@@ -110,7 +112,7 @@ impl SessionMiddleware {
             reg: Registered {
                 iss: self.issuer.clone(),
                 sub: user.map(Into::into),
-                exp: Some(now + self.expiration_time),
+                exp: Some(now + self.expiration_time.num_seconds() as u64),
                 nbf: Some(now),
                 ..Default::default()
             },
@@ -146,8 +148,10 @@ fn get_cookie<'mw, 'conn, D>(req: &Request<'mw, 'conn, D>,
                              -> Option<String> {
     if let Some(cookies) = req.origin.headers.get::<header::Cookie>() {
         for cookie in cookies.iter() {
-            if cookie.name == name {
-                return Some(cookie.value.clone());
+            if let Ok(cookie) = Cookie::parse(cookie.to_string()) {
+                if cookie.name() == name {
+                    return Some(cookie.value().to_string());
+                }
             }
         }
     }
@@ -382,9 +386,10 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
 
         match location {
             Some(TokenLocation::Cookie(name)) => {
-                let mut gone = CookiePair::new(name, "".to_owned());
-                gone.max_age = Some(0);
-                self.set(SetCookie(vec![gone]));
+                let gone = Cookie::build(name, "")
+                    .max_age(Duration::seconds(0))
+                    .finish();
+                self.set(SetCookie(vec![gone.to_string()]));
             }
             Some(TokenLocation::AuthorizationHeader) => {
                 self.headers_mut().set(Authorization(Bearer {
@@ -412,15 +417,15 @@ fn current_numeric_date() -> u64 {
 fn set_jwt<'a, D>(response: &mut Response<'a, D>,
                   location: TokenLocation,
                   token: String,
-                  expiration: u64) {
+                  expiration: Duration) {
     match location {
         TokenLocation::Cookie(name) => {
             // Note: We should set secure to true on the cookie
             // but the example server is only http.
-            let mut cookie = CookiePair::new(name, token);
-            cookie.max_age = Some(expiration);
+            let cookie =
+                Cookie::build(name, token).max_age(expiration).finish();
             debug!("Setting new cookie with token {}", cookie);
-            response.set(SetCookie(vec![cookie]));
+            response.set(SetCookie(vec![cookie.to_string()]));
         }
         TokenLocation::AuthorizationHeader => {
             debug!("Setting new auth header with token {}", token);

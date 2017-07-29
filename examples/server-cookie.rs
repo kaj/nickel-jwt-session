@@ -4,18 +4,21 @@ extern crate env_logger;
 extern crate hyper;
 extern crate nickel;
 extern crate nickel_jwt_session;
+extern crate time;
 
 use nickel::{HttpRouter, MiddlewareResult, Nickel, Request, Response};
 use nickel::extensions::Redirect;
 use nickel::status::StatusCode;
 use nickel_jwt_session::*;
 use std::collections::HashMap;
+use time::Duration;
 
 fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
+    // Use SessionMiddleware, with short expiration, to see it expire.
     server.utilize(SessionMiddleware::new("My very secret key")
-                       .expiration_time(60)); // Short, to see expiration.
+                       .expiration_time(Duration::minutes(1)));
 
     server.get("/", public);
     server.get("/login", login);
