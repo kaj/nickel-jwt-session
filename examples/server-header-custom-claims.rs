@@ -18,10 +18,11 @@ use time::Duration;
 fn main() {
     env_logger::init().unwrap();
     let mut server = Nickel::new();
-    // Use SessionMiddleware, with short expiration, to see it expire.
-    server.utilize(SessionMiddleware::new("My very secret key")
-                       .expiration_time(Duration::minutes(1))
-                       .using(TokenLocation::AuthorizationHeader));
+    server.utilize(
+        SessionMiddleware::new("My very secret key")
+            .expiration_time(Duration::minutes(1)) // Short, to see it expire.
+            .using(TokenLocation::AuthorizationHeader),
+    );
 
     server.get("/", public);
     server.get("/login", login);
@@ -37,9 +38,10 @@ fn public<'mw>(req: &mut Request, res: Response<'mw>) -> MiddlewareResult<'mw> {
     res.render("examples/templates/public.tpl", &data)
 }
 
-fn login<'mw>(_req: &mut Request,
-              mut res: Response<'mw>)
-              -> MiddlewareResult<'mw> {
+fn login<'mw>(
+    _req: &mut Request,
+    mut res: Response<'mw>,
+) -> MiddlewareResult<'mw> {
     // A real login view would get a username/password pair or a CAS
     // ticket or something, but in this example, we just consider
     // "carl" logged in.
@@ -50,16 +52,18 @@ fn login<'mw>(_req: &mut Request,
     res.redirect("/")
 }
 
-fn logout<'mw>(_req: &mut Request,
-               mut res: Response<'mw>)
-               -> MiddlewareResult<'mw> {
+fn logout<'mw>(
+    _req: &mut Request,
+    mut res: Response<'mw>,
+) -> MiddlewareResult<'mw> {
     res.clear_jwt();
     res.redirect("/")
 }
 
-fn private<'mw>(req: &mut Request,
-                res: Response<'mw>)
-                -> MiddlewareResult<'mw> {
+fn private<'mw>(
+    req: &mut Request,
+    res: Response<'mw>,
+) -> MiddlewareResult<'mw> {
     match req.valid_custom_claims() {
         Some(claims) => res.render("examples/templates/private.tpl", &claims),
         None => res.error(StatusCode::Forbidden, "Permission denied"),

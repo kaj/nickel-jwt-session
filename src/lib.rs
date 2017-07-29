@@ -105,7 +105,7 @@ impl SessionMiddleware {
     fn make_token(
         &self,
         user: Option<&str>,
-        custom_claims: Option<BTreeMap<String, Json>>
+        custom_claims: Option<BTreeMap<String, Json>>,
     ) -> Option<String> {
         let header: Header = Default::default();
         let now = current_numeric_date();
@@ -146,7 +146,7 @@ impl Key for CustomSession {
 
 fn get_cookie<'mw, 'conn, D>(
     req: &Request<'mw, 'conn, D>,
-    name: &str
+    name: &str,
 ) -> Option<String> {
     if let Some(cookies) = req.origin.headers.get::<header::Cookie>() {
         for cookie in cookies.iter() {
@@ -164,7 +164,7 @@ impl<D> Middleware<D> for SessionMiddleware {
     fn invoke<'mw, 'conn>(
         &self,
         req: &mut Request<'mw, 'conn, D>,
-        mut res: Response<'mw, D>
+        mut res: Response<'mw, D>,
     ) -> MiddlewareResult<'mw, D> {
         res.extensions_mut().insert::<SessionMiddleware>((*self).clone());
 
@@ -187,7 +187,10 @@ impl<D> Middleware<D> for SessionMiddleware {
                         let now = current_numeric_date();
                         if let Some(nbf) = claims.reg.nbf {
                             if now < nbf {
-                                warn!("Got a not-yet valid token: {:?}", claims);
+                                warn!(
+                                    "Got a not-yet valid token: {:?}",
+                                    claims
+                                );
                                 return Ok(Continue(res));
                             }
                         }
@@ -198,26 +201,29 @@ impl<D> Middleware<D> for SessionMiddleware {
                             }
                         }
                         if let Some(user) = claims.reg.sub {
-                            info!("User {:?} is authorized for {} on {}",
-                                  user,
-                                  req.origin.remote_addr,
-                                  req.origin.uri);
-                            req.extensions_mut()
-                                .insert::<Session>(Session {
-                                                       authorized_user: user,
-                                                   });
+                            info!(
+                                "User {:?} is authorized for {} on {}",
+                                user,
+                                req.origin.remote_addr,
+                                req.origin.uri
+                            );
+                            req.extensions_mut().insert::<Session>(Session {
+                                authorized_user: user,
+                            });
                         }
                         let custom_claims = claims.private;
                         if !custom_claims.is_empty() {
-                            info!("Custom claims {:?} are valid for {} on {}",
-                                  custom_claims,
-                                  req.origin.remote_addr,
-                                  req.origin.uri);
-                            req.extensions_mut()
-                                .insert::<CustomSession>(CustomSession {
-                                                             claims:
-                                                                 custom_claims,
-                                                         });
+                            info!(
+                                "Custom claims {:?} are valid for {} on {}",
+                                custom_claims,
+                                req.origin.remote_addr,
+                                req.origin.uri
+                            );
+                            req.extensions_mut().insert::<CustomSession>(
+                                CustomSession {
+                                    claims: custom_claims,
+                                }
+                            );
                         }
                     } else {
                         info!("Invalid token {:?}", token);
@@ -274,9 +280,11 @@ pub trait SessionResponseExtensions {
     fn set_jwt_custom_claims(&mut self, claims: BTreeMap<String, Json>);
 
     /// Set both the user and custom claims.
-    fn set_jwt_user_and_custom_claims(&mut self,
-                                      user: &str,
-                                      claims: BTreeMap<String, Json>);
+    fn set_jwt_user_and_custom_claims(
+        &mut self,
+        user: &str,
+        claims: BTreeMap<String, Json>,
+    );
 
     /// Clear the jwt.
     ///
@@ -311,9 +319,11 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         let (location, token, expiration) =
             match self.extensions().get::<SessionMiddleware>() {
                 Some(sm) => {
-                    (Some(sm.location.clone()),
-                     sm.make_token(Some(user), None),
-                     Some(sm.expiration_time))
+                    (
+                        Some(sm.location.clone()),
+                        sm.make_token(Some(user), None),
+                        Some(sm.expiration_time),
+                    )
                 }
                 None => {
                     warn!("No SessionMiddleware on response.  :-(");
@@ -334,9 +344,11 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         let (location, token, expiration) =
             match self.extensions().get::<SessionMiddleware>() {
                 Some(sm) => {
-                    (Some(sm.location.clone()),
-                     sm.make_token(None, Some(claims)),
-                     Some(sm.expiration_time))
+                    (
+                        Some(sm.location.clone()),
+                        sm.make_token(None, Some(claims)),
+                        Some(sm.expiration_time),
+                    )
                 }
                 None => {
                     warn!("No SessionMiddleware on response.  :-(");
@@ -352,18 +364,22 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         }
     }
 
-    fn set_jwt_user_and_custom_claims(&mut self,
-                                      user: &str,
-                                      claims: BTreeMap<String, Json>) {
+    fn set_jwt_user_and_custom_claims(
+        &mut self,
+        user: &str,
+        claims: BTreeMap<String, Json>,
+    ) {
         debug!("Should set a user and custom claims jwt for {}, {:?}",
                user,
                claims);
         let (location, token, expiration) =
             match self.extensions().get::<SessionMiddleware>() {
                 Some(sm) => {
-                    (Some(sm.location.clone()),
-                     sm.make_token(Some(user), Some(claims)),
-                     Some(sm.expiration_time))
+                    (
+                        Some(sm.location.clone()),
+                        sm.make_token(Some(user), Some(claims)),
+                        Some(sm.expiration_time),
+                    )
                 }
                 None => {
                     warn!("No SessionMiddleware on response.  :-(");
@@ -394,9 +410,9 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
                 self.set(SetCookie(vec![gone.to_string()]));
             }
             Some(TokenLocation::AuthorizationHeader) => {
-                self.headers_mut().set(Authorization(Bearer {
-                                                         token: "".to_owned(),
-                                                     }));
+                self.headers_mut().set(Authorization(
+                    Bearer { token: "".to_owned() },
+                ));
             }
             None => {}
         }
@@ -416,10 +432,12 @@ fn current_numeric_date() -> u64 {
 
 /// Set the token in the specified location to be valid for the expiration
 /// time specified from the current time.
-fn set_jwt<'a, D>(response: &mut Response<'a, D>,
-                  location: TokenLocation,
-                  token: String,
-                  expiration: Duration) {
+fn set_jwt<'a, D>(
+    response: &mut Response<'a, D>,
+    location: TokenLocation,
+    token: String,
+    expiration: Duration,
+) {
     match location {
         TokenLocation::Cookie(name) => {
             // Note: We should set secure to true on the cookie
