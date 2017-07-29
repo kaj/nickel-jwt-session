@@ -72,10 +72,12 @@ fn private<'mw>(
     req: &mut Request,
     res: Response<'mw>,
 ) -> MiddlewareResult<'mw> {
-    res.render("examples/templates/private.tpl",
-               &req.valid_custom_claims()
-                    .expect("Already validated claims in \
-                             AuthorizationRequired middleware"))
+    res.render(
+        "examples/templates/private.tpl",
+        &req.valid_custom_claims()
+            .expect("Already validated claims in \
+                     AuthorizationRequired middleware"),
+    )
 }
 
 pub struct AuthorizationRequired<M> {
@@ -89,17 +91,20 @@ impl<M> AuthorizationRequired<M> {
 }
 
 impl<D, M: Middleware<D>> Middleware<D> for AuthorizationRequired<M> {
-    fn invoke<'mw, 'conn>(&'mw self,
-                          req: &mut Request<'mw, 'conn, D>,
-                          res: Response<'mw, D>)
-                          -> MiddlewareResult<'mw, D> {
+    fn invoke<'mw, 'conn>(
+        &'mw self,
+        req: &mut Request<'mw, 'conn, D>,
+        res: Response<'mw, D>,
+    ) -> MiddlewareResult<'mw, D> {
         // Implement your application's authentication requirements here.
         // Could involve `authorized_user()`, `valid_custom_claims()`, or
         // one of those plus other validation as needed.
         if req.valid_custom_claims().is_none() {
-            return Err(NickelError::new(res,
-                                        "Permission denied",
-                                        StatusCode::Forbidden));
+            return Err(NickelError::new(
+                res,
+                "Permission denied",
+                StatusCode::Forbidden,
+            ));
         }
 
         self.next.invoke(req, res)

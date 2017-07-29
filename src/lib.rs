@@ -222,7 +222,7 @@ impl<D> Middleware<D> for SessionMiddleware {
                             req.extensions_mut().insert::<CustomSession>(
                                 CustomSession {
                                     claims: custom_claims,
-                                }
+                                },
                             );
                         }
                     } else {
@@ -369,9 +369,11 @@ impl<'a, 'b, D> SessionResponseExtensions for Response<'a, D> {
         user: &str,
         claims: BTreeMap<String, Json>,
     ) {
-        debug!("Should set a user and custom claims jwt for {}, {:?}",
-               user,
-               claims);
+        debug!(
+            "Should set a user and custom claims jwt for {}, {:?}",
+            user,
+            claims,
+        );
         let (location, token, expiration) =
             match self.extensions().get::<SessionMiddleware>() {
                 Some(sm) => {
