@@ -74,9 +74,9 @@ fn private<'mw>(
 ) -> MiddlewareResult<'mw> {
     res.render(
         "examples/templates/private.tpl",
-        &req.valid_custom_claims()
-            .expect("Already validated claims in \
-                     AuthorizationRequired middleware"),
+        &req.valid_custom_claims().expect(
+            "Already validated claims in AuthorizationRequired middleware",
+        ),
     )
 }
 
