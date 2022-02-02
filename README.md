@@ -1,7 +1,10 @@
 # nickel-jwt-session
 
 Experimental jwt-based user session for nickel.
-Suggestions for improvements are welcome.
+Note that the latest version of nickel was released in January 2019
+(and this depends on an even slighly older version).
+This should probably not be used any more, but may possibly be
+interesting to look at for someone.
 
 [![Build Status](https://travis-ci.org/kaj/nickel-jwt-session.svg?branch=master)](https://travis-ci.org/kaj/nickel-jwt-session)
 [![Crate](https://meritbadge.herokuapp.com/nickel-jwt-session)](https://crates.io/crates/nickel-jwt-session)

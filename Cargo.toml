@@ -1,6 +1,6 @@
 [package]
 name = "nickel-jwt-session"
-version = "0.10.0"
+version = "0.10.1"
 authors = [
 	"Rasmus Kaj <kaj@kth.se>",
 	"Carol Nichols <carol.nichols@gmail.com>"
@@ -28,5 +28,5 @@ time = "^0.1"
 [dev-dependencies]
 env_logger = "^0.4"
 
-[badges]
-travis-ci = { repository = "kaj/nickel-jwt-session" }
+[badges.maintenance]
+status = "deprecated"
